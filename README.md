@@ -36,7 +36,7 @@ This repo adapts that pipeline to DeepSeek-OCR-2 as the backbone and to QA-GNN-p
 - **Stage 0** — Load QA-GNN preprocessed `.pk` files (COO adjacency matrices; `concepts`/`qmask`/`amask`; 4 entries per question at indices `4i…4i+3`).
 - **Stage 1a** — Union-of-four choice-subgraph aggregation (`merge_choice_graphs`). ⚠️ This is a working interpretation of how to combine the four per-choice subgraphs into one image, not an explicit claim from the paper.
 - **Stage 1b** — Bridge-node filtering (keep nodes connecting a question node to an answer node); all Q/A nodes are kept unconditionally as `core`.
-- **Stage 1c** — Pruning heuristics (`max_nodes=18`, `max_edges=30`, `max_degree=5`, relation-priority ordering). ⚠️ Codex-invented, not paper-grounded — documented as such in the thesis.
+- **Stage 1c** — Pruning heuristics (`max_nodes=18`, `max_edges=30`, `max_degree=5`, relation-priority ordering). ⚠️ invented, not paper-grounded — documented as such in the thesis.
 - **Stage 1d** — Graphviz rendering, with an answer-leak fix gated behind `--reveal-correct-answer`.
 - **Stage 2** — KG-enhanced QA record construction (`build_stage2_record`).
 
