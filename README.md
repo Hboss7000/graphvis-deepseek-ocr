@@ -36,7 +36,7 @@ This repo adapts that pipeline to DeepSeek-OCR-2 as the backbone and to QA-GNN-p
 - **Stage 0** — Load QA-GNN preprocessed `.pk` files (COO adjacency matrices; `concepts`/`qmask`/`amask`; 4 entries per question at indices `4i…4i+3`).
 - **Stage 1a** — Union-of-four choice-subgraph aggregation (`merge_choice_graphs`). ⚠️ This is a working interpretation of how to combine the four per-choice subgraphs into one image, not an explicit claim from the paper.
 - **Stage 1b** — Bridge-node filtering (keep nodes connecting a question node to an answer node); all Q/A nodes are kept unconditionally as `core`.
-- **Stage 1c** — Pruning heuristics (`max_nodes=18`, `max_edges=30`, `max_degree=5`, relation-priority ordering). ⚠️ invented, not paper-grounded — documented as such in the thesis.
+- **Stage 1c** — Pruning heuristics (`max_nodes=18`, `max_edges=30`, `max_degree=5`, relation-priority ordering). ⚠️ Codex-invented, not paper-grounded — documented as such in the thesis.
 - **Stage 1d** — Graphviz rendering, with an answer-leak fix gated behind `--reveal-correct-answer`.
 - **Stage 2** — KG-enhanced QA record construction (`build_stage2_record`).
 
@@ -57,9 +57,37 @@ This repo adapts that pipeline to DeepSeek-OCR-2 as the backbone and to QA-GNN-p
 - [ ] Stage 1 fine-tuning run
 - [ ] Stage 2 fine-tuning run
 
-## Data
+## Data setup
 
-Input: QA-GNN preprocessed OpenBookQA release (`.pk`, COO adjacency format), 17-relation ConceptNet merge list.
+`scripts/generate_graphvis_datasets.py` expects the following files, relative to `--data-root` (default `data_preprocessed_release/`):
+
+```
+data_preprocessed_release/
+├── cpnet/
+│   └── concept.txt
+└── obqa/
+    ├── graph/
+    │   └── {split}.graph.adj.pk        # split = train | dev | test
+    └── statement/
+        └── {split}.statement.jsonl
+```
+
+This is the standard output layout of QA-GNN's own preprocessing pipeline ([Yasunaga et al., NAACL 2021](https://github.com/michiyasunaga/qagnn)).
+
+**Automated setup:**
+```bash
+./scripts/setup_data.sh
+```
+This clones the official QA-GNN repo, runs their `download_preprocessed_data.sh`, and copies the `cpnet/` and `obqa/` folders into `data_preprocessed_release/` at the project root. It does not re-host the data itself.
+
+⚠️ Not yet verified end-to-end — QA-GNN's data is hosted externally (Stanford NLP group servers), so if the download step fails, check the [QA-GNN repo](https://github.com/michiyasunaga/qagnn) directly for current download instructions.
+
+**Manual setup**, if the script doesn't work:
+1. Clone https://github.com/michiyasunaga/qagnn
+2. Run `./download_preprocessed_data.sh` inside it
+3. Copy `data/cpnet/` and `data/obqa/` from that repo into `data_preprocessed_release/` here
+
+Data is 17-relation-merged ConceptNet + QA-GNN-preprocessed OpenBookQA (`.pk` COO adjacency format, 4 graph entries per question — one per answer choice).
 
 ## Compute
 
