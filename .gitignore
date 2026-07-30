@@ -1,0 +1,31 @@
+# raw / preprocessed data (large, not yours to redistribute, regeneratable from QA-GNN release)
+data_preprocessed_release/
+
+# generated pipeline outputs (regeneratable from scripts)
+outputs/
+
+# cache files
+*.loaded_cache
+*.pk
+
+# scratch/inspection area — decide if you want this tracked (see note below)
+# inspection/
+
+# editor/tooling
+.vscode/
+.claude/
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+
+# images
+*.png
+*.jpg
+
+# OS
+.DS_Store
+inspection/conceptnet.en.pruned.graph
