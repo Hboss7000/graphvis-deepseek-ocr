@@ -108,11 +108,9 @@ def load_jsonl(path):
         return [json.loads(line) for line in f]
 
 
-def label_for_node(name, letters=None):
-    label = name.replace('_', ' ')
-    if letters:
-        return f'{label} [{",".join(sorted(letters))}]'
-    return label
+def label_for_node(name):
+    """Return the visible concept label without answer-choice markers."""
+    return name.replace('_', ' ')
 
 
 def merge_choice_graphs(statement_idx, graph_entries, statement, id2concept, n_choices=4):
@@ -279,19 +277,10 @@ def node_style(cid, merged_nodes, correct_label, reveal_correct_answer=False):
     if info['in_question']:
         return label_for_node(info['name']), '#ADD8E6', '1.5'
     if info['in_choices']:
-        letters = sorted(info['in_choices'])
         is_correct = reveal_correct_answer and correct_label in info['in_choices']
-        choice_colors = {
-            'A': '#FFD9B3',
-            'B': '#D9E8F5',
-            'C': '#E6D9F2',
-            'D': '#FFF2B3',
-        }
-        if len(letters) == 1:
-            fill = '#90EE90' if is_correct else choice_colors[letters[0]]
-        else:
-            fill = '#90EE90' if is_correct else '#E0E0E0'
-        return label_for_node(info['name'], letters), fill, '3' if is_correct else '1.5'
+        fill = '#90EE90' if is_correct else '#E0E0E0'
+        penwidth = '3' if is_correct else '1.5'
+        return label_for_node(info['name']), fill, penwidth
     return label_for_node(info['name']), 'white', '1.5'
 
 
@@ -368,7 +357,7 @@ def render_graph(
 
 
 def visible_node_names(merged_nodes, graph):
-    return [label_for_node(merged_nodes[cid]['name'], merged_nodes[cid]['in_choices']) for cid in graph['visible_nodes']]
+    return [label_for_node(merged_nodes[cid]['name']) for cid in graph['visible_nodes']]
 
 
 def edge_degree(graph):
@@ -381,8 +370,8 @@ def edge_degree(graph):
 
 def triple_text(merged_nodes, edge):
     src, rel, tgt = edge
-    src_label = label_for_node(merged_nodes[src]['name'], merged_nodes[src]['in_choices'])
-    tgt_label = label_for_node(merged_nodes[tgt]['name'], merged_nodes[tgt]['in_choices'])
+    src_label = label_for_node(merged_nodes[src]['name'])
+    tgt_label = label_for_node(merged_nodes[tgt]['name'])
     return f'({src_label}, {RELATION_TEXT.get(rel, rel)}, {tgt_label})'
 
 
@@ -419,7 +408,7 @@ def build_stage1_records(image_path, split, statement_idx, merged_nodes, graph, 
     ]
 
     if chosen_highest is not None:
-        name = label_for_node(merged_nodes[chosen_highest]['name'], merged_nodes[chosen_highest]['in_choices'])
+        name = label_for_node(merged_nodes[chosen_highest]['name'])
         candidates.append({
             'task_type': 'highest_node_degree',
             'prompt': rng.choice(HIGHEST_DEGREE_PROMPTS),
@@ -429,7 +418,7 @@ def build_stage1_records(image_path, split, statement_idx, merged_nodes, graph, 
     node_degree_options = [cid for cid in graph['visible_nodes']]
     if node_degree_options:
         chosen = rng.choice(node_degree_options)
-        name = label_for_node(merged_nodes[chosen]['name'], merged_nodes[chosen]['in_choices'])
+        name = label_for_node(merged_nodes[chosen]['name'])
         candidates.append({
             'task_type': 'node_degree',
             'prompt': rng.choice(NODE_DEGREE_PROMPTS).format(node=name),
@@ -482,7 +471,7 @@ def graph_metadata(statement_idx, statement, merged_nodes, graph, image_path):
         'visible_nodes': [
             {
                 'cid': cid,
-                'label': label_for_node(merged_nodes[cid]['name'], merged_nodes[cid]['in_choices']),
+                'label': label_for_node(merged_nodes[cid]['name']),
                 'name': merged_nodes[cid]['name'],
                 'in_question': merged_nodes[cid]['in_question'],
                 'in_choices': sorted(merged_nodes[cid]['in_choices']),
@@ -495,8 +484,8 @@ def graph_metadata(statement_idx, statement, merged_nodes, graph, image_path):
                 'source_cid': src,
                 'relation': rel,
                 'target_cid': tgt,
-                'source_label': label_for_node(merged_nodes[src]['name'], merged_nodes[src]['in_choices']),
-                'target_label': label_for_node(merged_nodes[tgt]['name'], merged_nodes[tgt]['in_choices']),
+                'source_label': label_for_node(merged_nodes[src]['name']),
+                'target_label': label_for_node(merged_nodes[tgt]['name']),
             }
             for src, rel, tgt in graph['edges']
         ],
