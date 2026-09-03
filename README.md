@@ -42,17 +42,16 @@ This repo adapts that pipeline to DeepSeek-OCR-2 as the backbone and to QA-GNN-p
 
 ## Known open issues
 
-1. Choice-letter label leak: `label_for_node` embeds `[A]`/`[B]`/etc. into node labels regardless of `--reveal-correct-answer`.
-2. Missing `pruning_note` in metadata documenting the non-paper-grounded pruning heuristics (an `aggregation_note` exists, but no analogous one for pruning).
-3. Edge-selection non-determinism: `merged_edges` relies on set iteration order, which can vary with `PYTHONHASHSEED`.
-4. `max_degree=5` is a soft limit: lifeline edges are appended unconditionally in Pass 1 before the cap-enforcing loop in Pass 2.
+1. Missing `pruning_note` in metadata documenting the non-paper-grounded pruning heuristics (an `aggregation_note` exists, but no analogous one for pruning).
+2. Edge-selection non-determinism: `merged_edges` relies on set iteration order, which can vary with `PYTHONHASHSEED`.
+3. `max_degree=5` is a soft limit: lifeline edges are appended unconditionally in Pass 1 before the cap-enforcing loop in Pass 2.
 
 ## Status
 
 - [x] Dataset generation pipeline built and analyzed
 - [x] Model loaded on TUM COMA cluster (H200 NVL, `bfloat16`, `eager` attention)
 - [ ] Live inference on a rendered graph image confirmed
-- [ ] Choice-letter label leak fixed
+- [x] Choice-letter label leak fixed
 - [ ] Full training split generated
 - [ ] Stage 1 fine-tuning run
 - [ ] Stage 2 fine-tuning run

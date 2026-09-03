@@ -35,6 +35,9 @@ def main() -> None:
         "invalid_prediction_indices": invalid,
         "correct": correct,
         "accuracy": correct / len(rows) if rows else None,
+        "predicted_option_counts": dict(
+            Counter(row.get("predicted_option") for row in rows)
+        ),
         "complete_and_valid": (
             len(rows) == args.expected_count
             and len(set(indices)) == args.expected_count
