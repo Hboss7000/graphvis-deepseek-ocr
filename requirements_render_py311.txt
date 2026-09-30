@@ -1,0 +1,5 @@
+# Render-only environment for /opt/conda Python 3.11 on Runpod.
+# requirements_full.txt's NumPy/SciPy pins have no CPython 3.11 wheels.
+graphviz==0.21
+numpy==2.4.6
+scipy==1.17.1

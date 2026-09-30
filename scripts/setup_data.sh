@@ -27,16 +27,29 @@ set -euo pipefail
 
 TARGET_DIR="${1:-data_preprocessed_release}"
 QAGNN_REPO="https://github.com/michiyasunaga/qagnn.git"
+if [[ "${TARGET_DIR}" = /* ]]; then
+    TARGET_PATH="${TARGET_DIR}"
+else
+    TARGET_PATH="${PWD}/${TARGET_DIR}"
+fi
+WORK_ROOT="${SETUP_DATA_WORK_ROOT:-${TMPDIR:-/tmp}}"
+DF_PATH="${SETUP_DATA_DF_PATH:-${WORK_ROOT}}"
 
-command -v git >/dev/null 2>&1 || { echo "git is required but not found." >&2; exit 1; }
+for command in git wget curl unzip; do
+    command -v "${command}" >/dev/null 2>&1 || {
+        echo "${command} is required but not found." >&2
+        exit 1
+    }
+done
 
-if [ -d "$TARGET_DIR/cpnet" ] && [ -d "$TARGET_DIR/obqa" ]; then
-    echo "Found existing $TARGET_DIR/cpnet and $TARGET_DIR/obqa — nothing to do."
-    echo "Delete or rename $TARGET_DIR if you want to re-fetch."
+if [ -d "$TARGET_PATH/cpnet" ] && [ -d "$TARGET_PATH/obqa" ]; then
+    echo "Found existing $TARGET_PATH/cpnet and $TARGET_PATH/obqa — nothing to do."
+    echo "Delete or rename $TARGET_PATH if you want to re-fetch."
     exit 0
 fi
 
-WORKDIR="$(mktemp -d)"
+mkdir -p "${WORK_ROOT}"
+WORKDIR="$(mktemp -d -p "${WORK_ROOT}" qagnn-data.XXXXXXXX)"
 echo "Working in temporary directory: $WORKDIR"
 cleanup() {
     echo "Cleaning up temporary files..."
@@ -57,8 +70,22 @@ fi
 
 echo "Running QA-GNN's official download_preprocessed_data.sh..."
 echo "(This downloads ConceptNet + CSQA + OBQA preprocessed data; it may take a while and use several GB.)"
+echo "Filesystem before QA-GNN download/extraction:"
+df -h "${DF_PATH}"
 chmod +x ./download_preprocessed_data.sh
-./download_preprocessed_data.sh
+bash ./download_preprocessed_data.sh
+
+echo "Filesystem after extraction, before deleting the downloaded archive:"
+df -h "${DF_PATH}"
+ARCHIVE_PATH="${WORKDIR}/qagnn/data_preprocessed_release.zip"
+if [[ -f "${ARCHIVE_PATH}" ]]; then
+    rm -f -- "${ARCHIVE_PATH}"
+    echo "Deleted temporary archive: ${ARCHIVE_PATH} (recoverable by re-downloading)."
+else
+    echo "QA-GNN's downloader left no archive at ${ARCHIVE_PATH}; nothing to delete."
+fi
+echo "Filesystem after archive deletion:"
+df -h "${DF_PATH}"
 
 if [ ! -d "./data/cpnet" ] || [ ! -d "./data/obqa" ]; then
     echo "ERROR: expected ./data/cpnet and ./data/obqa after download, but didn't find them." >&2
@@ -66,18 +93,18 @@ if [ ! -d "./data/cpnet" ] || [ ! -d "./data/obqa" ]; then
     exit 1
 fi
 
-echo "Copying cpnet/ and obqa/ into $TARGET_DIR ..."
-mkdir -p "$OLDPWD/$TARGET_DIR"
-cp -r ./data/cpnet "$OLDPWD/$TARGET_DIR/"
-cp -r ./data/obqa "$OLDPWD/$TARGET_DIR/"
+echo "Copying cpnet/ and obqa/ into $TARGET_PATH ..."
+mkdir -p "$TARGET_PATH"
+cp -r ./data/cpnet "$TARGET_PATH/"
+cp -r ./data/obqa "$TARGET_PATH/"
 
 cd "$OLDPWD"
 
 echo ""
 echo "Done. Verify with:"
-echo "  ls $TARGET_DIR/cpnet/concept.txt"
-echo "  ls $TARGET_DIR/obqa/graph/train.graph.adj.pk"
-echo "  ls $TARGET_DIR/obqa/statement/train.statement.jsonl"
+echo "  ls $TARGET_PATH/cpnet/concept.txt"
+echo "  ls $TARGET_PATH/obqa/graph/train.graph.adj.pk"
+echo "  ls $TARGET_PATH/obqa/statement/train.statement.jsonl"
 echo ""
 echo "Note: the QA-GNN download also includes data/csqa/ (CommonsenseQA)."
 echo "This project only needs cpnet/ and obqa/, so csqa/ was left out of the copy."

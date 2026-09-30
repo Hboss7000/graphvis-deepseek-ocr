@@ -1,0 +1,638 @@
+
+[2026-09-25T18:57:41Z] Runpod setup starting
+repository=/workspace/bachelorArbeit
+HF_HOME=/workspace/.cache/huggingface
+SYSTEM_PYTHON=/opt/conda/bin/python
+HF_TOKEN=set
+Python 3.11.13
+torch.__version__=2.8.0+cu128
+torch.version.cuda=12.8
+torch.cuda.is_available()=True
+torch.cuda.device=NVIDIA RTX PRO 6000 Blackwell Server Edition
+torch.cuda.running_arch=sm_120
+torch.cuda.get_arch_list()=['sm_70', 'sm_75', 'sm_80', 'sm_86', 'sm_90', 'sm_100', 'sm_120']
+Hit:1 http://security.ubuntu.com/ubuntu jammy-security InRelease
+Hit:2 https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64  InRelease
+Hit:3 http://archive.ubuntu.com/ubuntu jammy InRelease
+Hit:4 http://archive.ubuntu.com/ubuntu jammy-updates InRelease
+Hit:5 http://archive.ubuntu.com/ubuntu jammy-backports InRelease
+Reading package lists...
+Reading package lists...
+Building dependency tree...
+Reading state information...
+rsync is already the newest version (3.2.7-0ubuntu0.22.04.7).
+tmux is already the newest version (3.2a-4ubuntu0.2).
+graphviz is already the newest version (2.42.2-6ubuntu0.1).
+0 upgraded, 0 newly installed, 0 to remove and 110 not upgraded.
+rsync  version 3.2.7  protocol version 31
+tmux 3.2a
+dot - graphviz version 2.43.0 (0)
+smoke_image=/workspace/smoke/graph.png
+smoke_image_bytes=299193
+Requirement already satisfied: pip in /workspace/venvs/venv_ocr2/lib/python3.11/site-packages (24.0)
+Collecting pip
+  Downloading pip-26.2.1-py3-none-any.whl.metadata (4.6 kB)
+Downloading pip-26.2.1-py3-none-any.whl (1.8 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.8/1.8 MB 52.5 MB/s eta 0:00:00
+Installing collected packages: pip
+  Attempting uninstall: pip
+    Found existing installation: pip 24.0
+    Uninstalling pip-24.0:
+      Successfully uninstalled pip-24.0
+Successfully installed pip-26.2.1
+Requirement already satisfied: pip in /workspace/venvs/venv_qwen/lib/python3.11/site-packages (24.0)
+Collecting pip
+  Using cached pip-26.2.1-py3-none-any.whl.metadata (4.6 kB)
+Using cached pip-26.2.1-py3-none-any.whl (1.8 MB)
+Installing collected packages: pip
+  Attempting uninstall: pip
+    Found existing installation: pip 24.0
+    Uninstalling pip-24.0:
+      Successfully uninstalled pip-24.0
+Successfully installed pip-26.2.1
+Collecting transformers==4.46.3
+  Downloading transformers-4.46.3-py3-none-any.whl.metadata (44 kB)
+Requirement already satisfied: pillow in /opt/conda/lib/python3.11/site-packages (11.0.0)
+Collecting pillow
+  Downloading pillow-12.3.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (9.1 kB)
+Requirement already satisfied: packaging in /opt/conda/lib/python3.11/site-packages (25.0)
+Collecting packaging
+  Downloading packaging-26.3-py3-none-any.whl.metadata (3.5 kB)
+Requirement already satisfied: numpy in /opt/conda/lib/python3.11/site-packages (2.3.2)
+Collecting numpy
+  Downloading numpy-2.4.6-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (6.6 kB)
+Requirement already satisfied: requests in /opt/conda/lib/python3.11/site-packages (2.32.4)
+Collecting requests
+  Downloading requests-2.34.2-py3-none-any.whl.metadata (4.8 kB)
+Requirement already satisfied: tqdm in /opt/conda/lib/python3.11/site-packages (4.67.1)
+Collecting tqdm
+  Downloading tqdm-4.70.1-py3-none-any.whl.metadata (57 kB)
+Collecting einops
+  Downloading einops-0.8.2-py3-none-any.whl.metadata (13 kB)
+Collecting addict
+  Downloading addict-2.4.0-py3-none-any.whl.metadata (1.0 kB)
+Collecting accelerate
+  Downloading accelerate-1.15.0-py3-none-any.whl.metadata (19 kB)
+Collecting sentencepiece
+  Downloading sentencepiece-0.2.2-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (33 kB)
+Collecting safetensors
+  Downloading safetensors-0.8.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.2 kB)
+Requirement already satisfied: filelock in /opt/conda/lib/python3.11/site-packages (from transformers==4.46.3) (3.18.0)
+Collecting huggingface-hub<1.0,>=0.23.2 (from transformers==4.46.3)
+  Downloading huggingface_hub-0.36.2-py3-none-any.whl.metadata (15 kB)
+Requirement already satisfied: pyyaml>=5.1 in /opt/conda/lib/python3.11/site-packages (from transformers==4.46.3) (6.0.2)
+Collecting regex!=2019.12.17 (from transformers==4.46.3)
+  Downloading regex-2026.9.10-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (40 kB)
+Collecting tokenizers<0.21,>=0.20 (from transformers==4.46.3)
+  Downloading tokenizers-0.20.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.7 kB)
+Requirement already satisfied: fsspec>=2023.5.0 in /opt/conda/lib/python3.11/site-packages (from huggingface-hub<1.0,>=0.23.2->transformers==4.46.3) (2025.7.0)
+Collecting hf-xet<2.0.0,>=1.1.3 (from huggingface-hub<1.0,>=0.23.2->transformers==4.46.3)
+  Downloading hf_xet-1.6.0-cp38-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (4.9 kB)
+Requirement already satisfied: typing-extensions>=3.7.4.3 in /opt/conda/lib/python3.11/site-packages (from huggingface-hub<1.0,>=0.23.2->transformers==4.46.3) (4.14.1)
+Requirement already satisfied: charset_normalizer<4,>=2 in /opt/conda/lib/python3.11/site-packages (from requests) (3.4.2)
+Requirement already satisfied: idna<4,>=2.5 in /opt/conda/lib/python3.11/site-packages (from requests) (3.10)
+Requirement already satisfied: urllib3<3,>=1.26 in /opt/conda/lib/python3.11/site-packages (from requests) (2.5.0)
+Requirement already satisfied: certifi>=2023.5.7 in /opt/conda/lib/python3.11/site-packages (from requests) (2025.8.3)
+Requirement already satisfied: psutil in /opt/conda/lib/python3.11/site-packages (from accelerate) (7.0.0)
+Requirement already satisfied: torch>=2.0.0 in /opt/conda/lib/python3.11/site-packages (from accelerate) (2.8.0+cu128)
+Requirement already satisfied: sympy>=1.13.3 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (1.14.0)
+Requirement already satisfied: networkx in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (3.5)
+Requirement already satisfied: jinja2 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (3.1.6)
+Requirement already satisfied: nvidia-cuda-nvrtc-cu12==12.8.93 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.8.93)
+Requirement already satisfied: nvidia-cuda-runtime-cu12==12.8.90 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.8.90)
+Requirement already satisfied: nvidia-cuda-cupti-cu12==12.8.90 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.8.90)
+Requirement already satisfied: nvidia-cudnn-cu12==9.10.2.21 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (9.10.2.21)
+Requirement already satisfied: nvidia-cublas-cu12==12.8.4.1 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.8.4.1)
+Requirement already satisfied: nvidia-cufft-cu12==11.3.3.83 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (11.3.3.83)
+Requirement already satisfied: nvidia-curand-cu12==10.3.9.90 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (10.3.9.90)
+Requirement already satisfied: nvidia-cusolver-cu12==11.7.3.90 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (11.7.3.90)
+Requirement already satisfied: nvidia-cusparse-cu12==12.5.8.93 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.5.8.93)
+Requirement already satisfied: nvidia-cusparselt-cu12==0.7.1 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (0.7.1)
+Requirement already satisfied: nvidia-nccl-cu12==2.27.3 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (2.27.3)
+Requirement already satisfied: nvidia-nvtx-cu12==12.8.90 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.8.90)
+Requirement already satisfied: nvidia-nvjitlink-cu12==12.8.93 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.8.93)
+Requirement already satisfied: nvidia-cufile-cu12==1.13.1.3 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (1.13.1.3)
+Requirement already satisfied: triton==3.4.0 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (3.4.0)
+Requirement already satisfied: setuptools>=40.8.0 in /workspace/venvs/venv_ocr2/lib/python3.11/site-packages (from triton==3.4.0->torch>=2.0.0->accelerate) (65.5.0)
+Requirement already satisfied: mpmath<1.4,>=1.1.0 in /opt/conda/lib/python3.11/site-packages (from sympy>=1.13.3->torch>=2.0.0->accelerate) (1.3.0)
+Requirement already satisfied: MarkupSafe>=2.0 in /opt/conda/lib/python3.11/site-packages (from jinja2->torch>=2.0.0->accelerate) (3.0.2)
+Downloading transformers-4.46.3-py3-none-any.whl (10.0 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 10.0/10.0 MB 115.5 MB/s  0:00:00
+Downloading huggingface_hub-0.36.2-py3-none-any.whl (566 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 566.4/566.4 kB 234.4 MB/s  0:00:00
+Downloading hf_xet-1.6.0-cp38-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (4.5 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.5/4.5 MB 471.2 MB/s  0:00:00
+Downloading tokenizers-0.20.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (3.0 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.0/3.0 MB 84.8 MB/s  0:00:00
+Downloading pillow-12.3.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (6.9 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.9/6.9 MB 326.7 MB/s  0:00:00
+Downloading packaging-26.3-py3-none-any.whl (129 kB)
+Downloading numpy-2.4.6-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (16.9 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 16.9/16.9 MB 401.4 MB/s  0:00:00
+Downloading requests-2.34.2-py3-none-any.whl (73 kB)
+Downloading tqdm-4.70.1-py3-none-any.whl (80 kB)
+Downloading einops-0.8.2-py3-none-any.whl (65 kB)
+Downloading addict-2.4.0-py3-none-any.whl (3.8 kB)
+Downloading accelerate-1.15.0-py3-none-any.whl (394 kB)
+Downloading sentencepiece-0.2.2-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (1.4 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.4/1.4 MB 330.8 MB/s  0:00:00
+Downloading safetensors-0.8.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (516 kB)
+Downloading regex-2026.9.10-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (802 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 803.0/803.0 kB 346.1 MB/s  0:00:00
+Installing collected packages: addict, tqdm, sentencepiece, safetensors, requests, regex, pillow, packaging, numpy, hf-xet, einops, huggingface-hub, tokenizers, transformers, accelerate
+  Attempting uninstall: tqdm
+    Found existing installation: tqdm 4.67.1
+    Not uninstalling tqdm at /opt/conda/lib/python3.11/site-packages, outside environment /workspace/venvs/venv_ocr2
+    Can't uninstall 'tqdm'. No files were found to uninstall.
+  Attempting uninstall: requests
+    Found existing installation: requests 2.32.4
+    Not uninstalling requests at /opt/conda/lib/python3.11/site-packages, outside environment /workspace/venvs/venv_ocr2
+    Can't uninstall 'requests'. No files were found to uninstall.
+  Attempting uninstall: pillow
+    Found existing installation: pillow 11.0.0
+    Not uninstalling pillow at /opt/conda/lib/python3.11/site-packages, outside environment /workspace/venvs/venv_ocr2
+    Can't uninstall 'pillow'. No files were found to uninstall.
+  Attempting uninstall: packaging
+    Found existing installation: packaging 25.0
+    Not uninstalling packaging at /opt/conda/lib/python3.11/site-packages, outside environment /workspace/venvs/venv_ocr2
+    Can't uninstall 'packaging'. No files were found to uninstall.
+  Attempting uninstall: numpy
+    Found existing installation: numpy 2.3.2
+    Not uninstalling numpy at /opt/conda/lib/python3.11/site-packages, outside environment /workspace/venvs/venv_ocr2
+    Can't uninstall 'numpy'. No files were found to uninstall.
+
+[2026-09-25T18:58:45Z] Runpod setup starting
+repository=/workspace/bachelorArbeit
+HF_HOME=/workspace/.cache/huggingface
+SYSTEM_PYTHON=/opt/conda/bin/python
+HF_TOKEN=set
+Python 3.11.13
+torch.__version__=2.8.0+cu128
+torch.version.cuda=12.8
+torch.cuda.is_available()=True
+torch.cuda.device=NVIDIA RTX PRO 6000 Blackwell Server Edition
+torch.cuda.running_arch=sm_120
+torch.cuda.get_arch_list()=['sm_70', 'sm_75', 'sm_80', 'sm_86', 'sm_90', 'sm_100', 'sm_120']
+Hit:1 https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64  InRelease
+Hit:2 http://security.ubuntu.com/ubuntu jammy-security InRelease
+Hit:3 http://archive.ubuntu.com/ubuntu jammy InRelease
+Hit:4 http://archive.ubuntu.com/ubuntu jammy-updates InRelease
+Hit:5 http://archive.ubuntu.com/ubuntu jammy-backports InRelease
+Reading package lists...
+Reading package lists...
+Building dependency tree...
+Reading state information...
+rsync is already the newest version (3.2.7-0ubuntu0.22.04.7).
+tmux is already the newest version (3.2a-4ubuntu0.2).
+graphviz is already the newest version (2.42.2-6ubuntu0.1).
+0 upgraded, 0 newly installed, 0 to remove and 110 not upgraded.
+rsync  version 3.2.7  protocol version 31
+tmux 3.2a
+dot - graphviz version 2.43.0 (0)
+smoke_image=/workspace/smoke/graph.png
+smoke_image_bytes=299193
+Requirement already satisfied: pip in /workspace/venvs/venv_ocr2/lib/python3.11/site-packages (26.2.1)
+Requirement already satisfied: pip in /workspace/venvs/venv_qwen/lib/python3.11/site-packages (26.2.1)
+Collecting transformers==4.46.3
+  Using cached transformers-4.46.3-py3-none-any.whl.metadata (44 kB)
+Requirement already satisfied: pillow in /workspace/venvs/venv_ocr2/lib/python3.11/site-packages (12.3.0)
+Requirement already satisfied: packaging in /workspace/venvs/venv_ocr2/lib/python3.11/site-packages (26.3)
+Requirement already satisfied: numpy in /workspace/venvs/venv_ocr2/lib/python3.11/site-packages (2.4.6)
+Requirement already satisfied: requests in /workspace/venvs/venv_ocr2/lib/python3.11/site-packages (2.34.2)
+Requirement already satisfied: tqdm in /workspace/venvs/venv_ocr2/lib/python3.11/site-packages (4.70.1)
+Collecting einops
+  Using cached einops-0.8.2-py3-none-any.whl.metadata (13 kB)
+Requirement already satisfied: addict in /workspace/venvs/venv_ocr2/lib/python3.11/site-packages (2.4.0)
+Collecting accelerate
+  Using cached accelerate-1.15.0-py3-none-any.whl.metadata (19 kB)
+Requirement already satisfied: sentencepiece in /workspace/venvs/venv_ocr2/lib/python3.11/site-packages (0.2.2)
+Requirement already satisfied: safetensors in /workspace/venvs/venv_ocr2/lib/python3.11/site-packages (0.8.0)
+Requirement already satisfied: filelock in /opt/conda/lib/python3.11/site-packages (from transformers==4.46.3) (3.18.0)
+Collecting huggingface-hub<1.0,>=0.23.2 (from transformers==4.46.3)
+  Using cached huggingface_hub-0.36.2-py3-none-any.whl.metadata (15 kB)
+Requirement already satisfied: pyyaml>=5.1 in /opt/conda/lib/python3.11/site-packages (from transformers==4.46.3) (6.0.2)
+Requirement already satisfied: regex!=2019.12.17 in /workspace/venvs/venv_ocr2/lib/python3.11/site-packages (from transformers==4.46.3) (2026.9.10)
+Collecting tokenizers<0.21,>=0.20 (from transformers==4.46.3)
+  Using cached tokenizers-0.20.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.7 kB)
+Requirement already satisfied: fsspec>=2023.5.0 in /opt/conda/lib/python3.11/site-packages (from huggingface-hub<1.0,>=0.23.2->transformers==4.46.3) (2025.7.0)
+Collecting hf-xet<2.0.0,>=1.1.3 (from huggingface-hub<1.0,>=0.23.2->transformers==4.46.3)
+  Using cached hf_xet-1.6.0-cp38-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (4.9 kB)
+Requirement already satisfied: typing-extensions>=3.7.4.3 in /opt/conda/lib/python3.11/site-packages (from huggingface-hub<1.0,>=0.23.2->transformers==4.46.3) (4.14.1)
+Requirement already satisfied: charset_normalizer<4,>=2 in /opt/conda/lib/python3.11/site-packages (from requests) (3.4.2)
+Requirement already satisfied: idna<4,>=2.5 in /opt/conda/lib/python3.11/site-packages (from requests) (3.10)
+Requirement already satisfied: urllib3<3,>=1.26 in /opt/conda/lib/python3.11/site-packages (from requests) (2.5.0)
+Requirement already satisfied: certifi>=2023.5.7 in /opt/conda/lib/python3.11/site-packages (from requests) (2025.8.3)
+Requirement already satisfied: psutil in /opt/conda/lib/python3.11/site-packages (from accelerate) (7.0.0)
+Requirement already satisfied: torch>=2.0.0 in /opt/conda/lib/python3.11/site-packages (from accelerate) (2.8.0+cu128)
+Requirement already satisfied: sympy>=1.13.3 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (1.14.0)
+Requirement already satisfied: networkx in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (3.5)
+Requirement already satisfied: jinja2 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (3.1.6)
+Requirement already satisfied: nvidia-cuda-nvrtc-cu12==12.8.93 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.8.93)
+Requirement already satisfied: nvidia-cuda-runtime-cu12==12.8.90 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.8.90)
+Requirement already satisfied: nvidia-cuda-cupti-cu12==12.8.90 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.8.90)
+Requirement already satisfied: nvidia-cudnn-cu12==9.10.2.21 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (9.10.2.21)
+Requirement already satisfied: nvidia-cublas-cu12==12.8.4.1 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.8.4.1)
+Requirement already satisfied: nvidia-cufft-cu12==11.3.3.83 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (11.3.3.83)
+Requirement already satisfied: nvidia-curand-cu12==10.3.9.90 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (10.3.9.90)
+Requirement already satisfied: nvidia-cusolver-cu12==11.7.3.90 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (11.7.3.90)
+Requirement already satisfied: nvidia-cusparse-cu12==12.5.8.93 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.5.8.93)
+Requirement already satisfied: nvidia-cusparselt-cu12==0.7.1 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (0.7.1)
+Requirement already satisfied: nvidia-nccl-cu12==2.27.3 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (2.27.3)
+Requirement already satisfied: nvidia-nvtx-cu12==12.8.90 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.8.90)
+Requirement already satisfied: nvidia-nvjitlink-cu12==12.8.93 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.8.93)
+Requirement already satisfied: nvidia-cufile-cu12==1.13.1.3 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (1.13.1.3)
+Requirement already satisfied: triton==3.4.0 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (3.4.0)
+Requirement already satisfied: setuptools>=40.8.0 in /workspace/venvs/venv_ocr2/lib/python3.11/site-packages (from triton==3.4.0->torch>=2.0.0->accelerate) (65.5.0)
+Requirement already satisfied: mpmath<1.4,>=1.1.0 in /opt/conda/lib/python3.11/site-packages (from sympy>=1.13.3->torch>=2.0.0->accelerate) (1.3.0)
+Requirement already satisfied: MarkupSafe>=2.0 in /opt/conda/lib/python3.11/site-packages (from jinja2->torch>=2.0.0->accelerate) (3.0.2)
+Using cached transformers-4.46.3-py3-none-any.whl (10.0 MB)
+Using cached huggingface_hub-0.36.2-py3-none-any.whl (566 kB)
+Using cached hf_xet-1.6.0-cp38-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (4.5 MB)
+Using cached tokenizers-0.20.3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (3.0 MB)
+Using cached einops-0.8.2-py3-none-any.whl (65 kB)
+Using cached accelerate-1.15.0-py3-none-any.whl (394 kB)
+Installing collected packages: hf-xet, einops, huggingface-hub, tokenizers, transformers, accelerate
+
+Successfully installed accelerate-1.15.0 einops-0.8.2 hf-xet-1.6.0 huggingface-hub-0.36.2 tokenizers-0.20.3 transformers-4.46.3
+Collecting transformers==5.16.1
+  Downloading transformers-5.16.1-py3-none-any.whl.metadata (32 kB)
+Requirement already satisfied: pillow in /opt/conda/lib/python3.11/site-packages (11.0.0)
+Collecting pillow
+  Using cached pillow-12.3.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (9.1 kB)
+Requirement already satisfied: packaging in /opt/conda/lib/python3.11/site-packages (25.0)
+Collecting packaging
+  Using cached packaging-26.3-py3-none-any.whl.metadata (3.5 kB)
+Requirement already satisfied: numpy in /opt/conda/lib/python3.11/site-packages (2.3.2)
+Collecting numpy
+  Using cached numpy-2.4.6-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (6.6 kB)
+Collecting accelerate
+  Using cached accelerate-1.15.0-py3-none-any.whl.metadata (19 kB)
+Collecting sentencepiece
+  Using cached sentencepiece-0.2.2-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl.metadata (33 kB)
+Collecting safetensors
+  Using cached safetensors-0.8.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.2 kB)
+Collecting huggingface-hub<2.0,>=1.5.0 (from transformers==5.16.1)
+  Downloading huggingface_hub-1.33.0-py3-none-any.whl.metadata (16 kB)
+Requirement already satisfied: pyyaml>=5.1 in /opt/conda/lib/python3.11/site-packages (from transformers==5.16.1) (6.0.2)
+Collecting regex>=2025.10.22 (from transformers==5.16.1)
+  Using cached regex-2026.9.10-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (40 kB)
+Collecting tokenizers<0.24.0,>=0.23.1 (from transformers==5.16.1)
+  Downloading tokenizers-0.23.2-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (9.8 kB)
+Collecting typer (from transformers==5.16.1)
+  Downloading typer-0.27.2-py3-none-any.whl.metadata (16 kB)
+Requirement already satisfied: tqdm>=4.60 in /opt/conda/lib/python3.11/site-packages (from transformers==5.16.1) (4.67.1)
+Collecting click<9.0.0,>=8.4.2 (from huggingface-hub<2.0,>=1.5.0->transformers==5.16.1)
+  Downloading click-8.5.0-py3-none-any.whl.metadata (2.6 kB)
+Requirement already satisfied: filelock>=3.10.0 in /opt/conda/lib/python3.11/site-packages (from huggingface-hub<2.0,>=1.5.0->transformers==5.16.1) (3.18.0)
+Requirement already satisfied: fsspec>=2023.5.0 in /opt/conda/lib/python3.11/site-packages (from huggingface-hub<2.0,>=1.5.0->transformers==5.16.1) (2025.7.0)
+Collecting hf-xet<2.0.0,>=1.6.0 (from huggingface-hub<2.0,>=1.5.0->transformers==5.16.1)
+  Using cached hf_xet-1.6.0-cp38-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl.metadata (4.9 kB)
+Collecting httpx<1,>=0.23.0 (from huggingface-hub<2.0,>=1.5.0->transformers==5.16.1)
+  Downloading httpx-0.28.1-py3-none-any.whl.metadata (7.1 kB)
+Requirement already satisfied: typing-extensions>=4.1.0 in /opt/conda/lib/python3.11/site-packages (from huggingface-hub<2.0,>=1.5.0->transformers==5.16.1) (4.14.1)
+Collecting anyio (from httpx<1,>=0.23.0->huggingface-hub<2.0,>=1.5.0->transformers==5.16.1)
+  Downloading anyio-4.15.1-py3-none-any.whl.metadata (4.7 kB)
+Requirement already satisfied: certifi in /opt/conda/lib/python3.11/site-packages (from httpx<1,>=0.23.0->huggingface-hub<2.0,>=1.5.0->transformers==5.16.1) (2025.8.3)
+Collecting httpcore==1.* (from httpx<1,>=0.23.0->huggingface-hub<2.0,>=1.5.0->transformers==5.16.1)
+  Downloading httpcore-1.0.9-py3-none-any.whl.metadata (21 kB)
+Requirement already satisfied: idna in /opt/conda/lib/python3.11/site-packages (from httpx<1,>=0.23.0->huggingface-hub<2.0,>=1.5.0->transformers==5.16.1) (3.10)
+Collecting h11>=0.16 (from httpcore==1.*->httpx<1,>=0.23.0->huggingface-hub<2.0,>=1.5.0->transformers==5.16.1)
+  Downloading h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+Requirement already satisfied: psutil in /opt/conda/lib/python3.11/site-packages (from accelerate) (7.0.0)
+Requirement already satisfied: torch>=2.0.0 in /opt/conda/lib/python3.11/site-packages (from accelerate) (2.8.0+cu128)
+Requirement already satisfied: sympy>=1.13.3 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (1.14.0)
+Requirement already satisfied: networkx in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (3.5)
+Requirement already satisfied: jinja2 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (3.1.6)
+Requirement already satisfied: nvidia-cuda-nvrtc-cu12==12.8.93 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.8.93)
+Requirement already satisfied: nvidia-cuda-runtime-cu12==12.8.90 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.8.90)
+Requirement already satisfied: nvidia-cuda-cupti-cu12==12.8.90 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.8.90)
+Requirement already satisfied: nvidia-cudnn-cu12==9.10.2.21 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (9.10.2.21)
+Requirement already satisfied: nvidia-cublas-cu12==12.8.4.1 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.8.4.1)
+Requirement already satisfied: nvidia-cufft-cu12==11.3.3.83 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (11.3.3.83)
+Requirement already satisfied: nvidia-curand-cu12==10.3.9.90 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (10.3.9.90)
+Requirement already satisfied: nvidia-cusolver-cu12==11.7.3.90 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (11.7.3.90)
+Requirement already satisfied: nvidia-cusparse-cu12==12.5.8.93 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.5.8.93)
+Requirement already satisfied: nvidia-cusparselt-cu12==0.7.1 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (0.7.1)
+Requirement already satisfied: nvidia-nccl-cu12==2.27.3 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (2.27.3)
+Requirement already satisfied: nvidia-nvtx-cu12==12.8.90 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.8.90)
+Requirement already satisfied: nvidia-nvjitlink-cu12==12.8.93 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.8.93)
+Requirement already satisfied: nvidia-cufile-cu12==1.13.1.3 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (1.13.1.3)
+Requirement already satisfied: triton==3.4.0 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (3.4.0)
+Requirement already satisfied: setuptools>=40.8.0 in /workspace/venvs/venv_qwen/lib/python3.11/site-packages (from triton==3.4.0->torch>=2.0.0->accelerate) (65.5.0)
+Requirement already satisfied: mpmath<1.4,>=1.1.0 in /opt/conda/lib/python3.11/site-packages (from sympy>=1.13.3->torch>=2.0.0->accelerate) (1.3.0)
+Collecting typing-extensions>=4.1.0 (from huggingface-hub<2.0,>=1.5.0->transformers==5.16.1)
+  Downloading typing_extensions-4.16.0-py3-none-any.whl.metadata (3.3 kB)
+Requirement already satisfied: MarkupSafe>=2.0 in /opt/conda/lib/python3.11/site-packages (from jinja2->torch>=2.0.0->accelerate) (3.0.2)
+Collecting shellingham>=1.3.0 (from typer->transformers==5.16.1)
+  Downloading shellingham-1.5.4-py2.py3-none-any.whl.metadata (3.5 kB)
+Collecting rich>=13.8.0 (from typer->transformers==5.16.1)
+  Downloading rich-15.0.0-py3-none-any.whl.metadata (18 kB)
+Collecting annotated-doc>=0.0.2 (from typer->transformers==5.16.1)
+  Downloading annotated_doc-0.0.5-py3-none-any.whl.metadata (6.5 kB)
+Collecting markdown-it-py>=2.2.0 (from rich>=13.8.0->typer->transformers==5.16.1)
+  Downloading markdown_it_py-4.2.0-py3-none-any.whl.metadata (7.4 kB)
+Requirement already satisfied: pygments<3.0.0,>=2.13.0 in /opt/conda/lib/python3.11/site-packages (from rich>=13.8.0->typer->transformers==5.16.1) (2.19.2)
+Collecting mdurl~=0.1 (from markdown-it-py>=2.2.0->rich>=13.8.0->typer->transformers==5.16.1)
+  Downloading mdurl-0.1.2-py3-none-any.whl.metadata (1.6 kB)
+Downloading transformers-5.16.1-py3-none-any.whl (12.1 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 12.1/12.1 MB 205.0 MB/s  0:00:00
+Downloading huggingface_hub-1.33.0-py3-none-any.whl (846 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 846.4/846.4 kB 325.2 MB/s  0:00:00
+Downloading click-8.5.0-py3-none-any.whl (125 kB)
+Using cached hf_xet-1.6.0-cp38-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl (4.5 MB)
+Downloading httpx-0.28.1-py3-none-any.whl (73 kB)
+Downloading httpcore-1.0.9-py3-none-any.whl (78 kB)
+Downloading tokenizers-0.23.2-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (3.4 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3.4/3.4 MB 259.8 MB/s  0:00:00
+Using cached pillow-12.3.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (6.9 MB)
+Using cached packaging-26.3-py3-none-any.whl (129 kB)
+Using cached numpy-2.4.6-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (16.9 MB)
+Using cached accelerate-1.15.0-py3-none-any.whl (394 kB)
+Using cached sentencepiece-0.2.2-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl (1.4 MB)
+Using cached safetensors-0.8.0-cp310-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (516 kB)
+Downloading h11-0.16.0-py3-none-any.whl (37 kB)
+Using cached regex-2026.9.10-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (802 kB)
+Downloading anyio-4.15.1-py3-none-any.whl (132 kB)
+Downloading typing_extensions-4.16.0-py3-none-any.whl (45 kB)
+Downloading typer-0.27.2-py3-none-any.whl (123 kB)
+Downloading annotated_doc-0.0.5-py3-none-any.whl (5.3 kB)
+Downloading rich-15.0.0-py3-none-any.whl (310 kB)
+Downloading markdown_it_py-4.2.0-py3-none-any.whl (91 kB)
+Downloading mdurl-0.1.2-py3-none-any.whl (10.0 kB)
+Downloading shellingham-1.5.4-py2.py3-none-any.whl (9.8 kB)
+Installing collected packages: typing-extensions, shellingham, sentencepiece, safetensors, regex, pillow, packaging, numpy, mdurl, hf-xet, h11, click, annotated-doc, markdown-it-py, httpcore, anyio, rich, httpx, typer, huggingface-hub, tokenizers, accelerate, transformers
+  Attempting uninstall: typing-extensions
+    Found existing installation: typing_extensions 4.14.1
+    Not uninstalling typing-extensions at /opt/conda/lib/python3.11/site-packages, outside environment /workspace/venvs/venv_qwen
+    Can't uninstall 'typing_extensions'. No files were found to uninstall.
+  Attempting uninstall: pillow
+    Found existing installation: pillow 11.0.0
+    Not uninstalling pillow at /opt/conda/lib/python3.11/site-packages, outside environment /workspace/venvs/venv_qwen
+    Can't uninstall 'pillow'. No files were found to uninstall.
+  Attempting uninstall: packaging
+    Found existing installation: packaging 25.0
+    Not uninstalling packaging at /opt/conda/lib/python3.11/site-packages, outside environment /workspace/venvs/venv_qwen
+    Can't uninstall 'packaging'. No files were found to uninstall.
+  Attempting uninstall: numpy
+    Found existing installation: numpy 2.3.2
+    Not uninstalling numpy at /opt/conda/lib/python3.11/site-packages, outside environment /workspace/venvs/venv_qwen
+    Can't uninstall 'numpy'. No files were found to uninstall.
+  Attempting uninstall: click
+    Found existing installation: click 8.2.1
+    Not uninstalling click at /opt/conda/lib/python3.11/site-packages, outside environment /workspace/venvs/venv_qwen
+    Can't uninstall 'click'. No files were found to uninstall.
+
+Successfully installed accelerate-1.15.0 annotated-doc-0.0.5 anyio-4.15.1 click-8.5.0 h11-0.16.0 hf-xet-1.6.0 httpcore-1.0.9 httpx-0.28.1 huggingface-hub-1.33.0 markdown-it-py-4.2.0 mdurl-0.1.2 numpy-2.4.6 packaging-26.3 pillow-12.3.0 regex-2026.9.10 rich-15.0.0 safetensors-0.8.0 sentencepiece-0.2.2 shellingham-1.5.4 tokenizers-0.23.2 transformers-5.16.1 typer-0.27.2 typing-extensions-4.16.0
+env=/workspace/venvs/venv_ocr2
+python=3.11.13
+torch=2.8.0+cu128; cuda=12.8; transformers=4.46.3
+env=/workspace/venvs/venv_qwen
+python=3.11.13
+torch=2.8.0+cu128; cuda=12.8; transformers=5.16.1
+Fetching 16 files:   0%|          | 0/16 [00:00<?, ?it/s]Fetching 16 files:   6%|▋         | 1/16 [00:00<00:03,  4.29it/s]Fetching 16 files:  50%|█████     | 8/16 [00:00<00:00, 22.33it/s]Fetching 16 files:  81%|████████▏ | 13/16 [00:00<00:00, 25.32it/s]Fetching 16 files:  94%|█████████▍| 15/16 [00:19<00:00, 25.32it/s]Fetching 16 files: 100%|██████████| 16/16 [00:55<00:00,  5.41s/it]Fetching 16 files: 100%|██████████| 16/16 [00:55<00:00,  3.49s/it]
+cached deepseek-ai/DeepSeek-OCR-2@aaa02f3811945a91062062994c5c4a3f4c0af2b0 at /workspace/.cache/huggingface/hub/models--deepseek-ai--DeepSeek-OCR-2/snapshots/aaa02f3811945a91062062994c5c4a3f4c0af2b0
+Fetching 16 files:   0%|          | 0/16 [00:00<?, ?it/s]Fetching 16 files:   6%|▋         | 1/16 [00:00<00:02,  5.07it/s]Fetching 16 files:  38%|███▊      | 6/16 [00:00<00:00, 16.63it/s]Fetching 16 files:  56%|█████▋    | 9/16 [00:00<00:00, 16.96it/s]Fetching 16 files:  69%|██████▉   | 11/16 [00:01<00:00,  8.42it/s]Fetching 16 files:  75%|███████▌  | 12/16 [00:14<00:00,  8.42it/s]Fetching 16 files:  81%|████████▏ | 13/16 [01:18<00:34, 11.36s/it]Fetching 16 files:  88%|████████▊ | 14/16 [02:00<00:33, 16.77s/it]Fetching 16 files:  94%|█████████▍| 15/16 [02:00<00:13, 13.48s/it]Fetching 16 files: 100%|██████████| 16/16 [02:00<00:00, 10.53s/it]Fetching 16 files: 100%|██████████| 16/16 [02:00<00:00,  7.56s/it]
+cached Qwen/Qwen3-VL-8B-Instruct@0c351dd01ed87e9c1b53cbc748cba10e6187ff3b at /workspace/.cache/huggingface/hub/models--Qwen--Qwen3-VL-8B-Instruct/snapshots/0c351dd01ed87e9c1b53cbc748cba10e6187ff3b
+Fetching 18 files:   0%|          | 0/18 [00:00<?, ?it/s]Fetching 18 files:   6%|▌         | 1/18 [00:00<00:02,  5.78it/s]Fetching 18 files:  39%|███▉      | 7/18 [00:00<00:00, 22.66it/s]Fetching 18 files:  56%|█████▌    | 10/18 [00:00<00:00, 23.14it/s]Fetching 18 files:  61%|██████    | 11/18 [00:12<00:00, 23.14it/s]Fetching 18 files:  67%|██████▋   | 12/18 [00:21<00:17,  2.94s/it]Fetching 18 files:  72%|███████▏  | 13/18 [00:23<00:13,  2.65s/it]Fetching 18 files:  72%|███████▏  | 13/18 [00:42<00:13,  2.65s/it]Fetching 18 files:  78%|███████▊  | 14/18 [02:54<02:02, 30.64s/it]Fetching 18 files:  83%|████████▎ | 15/18 [02:57<01:14, 24.72s/it]Fetching 18 files:  89%|████████▉ | 16/18 [02:57<00:38, 19.14s/it]Fetching 18 files: 100%|██████████| 18/18 [02:57<00:00,  9.89s/it]
+cached google/gemma-3-12b-it@96b6f1eccf38110c56df3a15bffe176da04bfd80 at /workspace/.cache/huggingface/hub/models--google--gemma-3-12b-it/snapshots/96b6f1eccf38110c56df3a15bffe176da04bfd80
+[2026-09-25T19:05:59Z] DeepSeek-OCR-2 smoke inference
+You are using a model of type deepseek_vl_v2 to instantiate a model of type DeepseekOCR2. This is not supported for all configurations of models and can yield errors.
+/workspace/venvs/venv_ocr2/lib/python3.11/site-packages/transformers/generation/configuration_utils.py:590: UserWarning: `do_sample` is set to `False`. However, `temperature` is set to `0.0` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `temperature`.
+  warnings.warn(
+The attention mask and the pad token id were not set. As a consequence, you may observe unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results.
+Setting `pad_token_id` to `eos_token_id`:None for open-end generation.
+The attention mask is not set and cannot be inferred from input because pad token is same as eos token. As a consequence, you may observe unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results.
+The `seen_tokens` attribute is deprecated and will be removed in v4.41. Use the `cache_position` model input instead.
+`get_max_cache()` is deprecated for all Cache classes. Use `get_max_cache_shape()` instead. Calling `get_max_cache()` will raise error from v4.48
+The attention layers in this model are transitioning from computing the RoPE embeddings internally through `position_ids` (2D tensor with the indexes of the tokens), to using externally computed `position_embeddings` (Tuple of tensors, containing cos and sin). In v4.46 `position_ids` will be removed and `position_embeddings` will be mandatory.
+=====================
+BASE:  torch.Size([1, 256, 1280])
+PATCHES:  torch.Size([6, 144, 1280])
+=====================
+DeepSeek-OCR-2 result: 'The figure illustrates the concept of a knowledge graph (KG) and its application in identifying relationships between entities. It is divided into two main sections: the left side shows a simple KG, and the right side demonstrates how the KG can be used to find relationships between entities.\n\n### Left Side: Simple KG\nThe left side of the figure shows a basic knowledge graph with four nodes connected by edges. The nodes are labeled as follows:\n1. **good**\n2. **money**\n3. **start**\n4. **looking**\n\nEach node is associated with an antonym or related term:\n- **good** is related to **antonym**.\n- **money** is related to **related to**.\n- **start** is related to **related to**.\n- **looking** is related to **related to**.\n\nThese nodes are connected by edges, indicating relationships between them. The edges are labeled with the terms "best," "nice," "end," and "look."\n\n### Right Side: KG with Connections\nThe right side of the figure shows a more complex KG with additional connections and relationships. The nodes are labeled with various terms, and the edges represent the relationships between them. The terms are as follows:\n- **lunch**\n- **buy**\n- **call**\n- **eat**\n- **eating**\n- **less**\n- **monopoly**\n- **phone**\n- **friends**\n- **phone call**\n- **eating lunch**\n- **have lunch**\n- **eat lunch**\n- **calls**\n- **phone calls**\n- **monopoly money**\n- **with friends**\n\nThe connections between nodes indicate that the relationships are not just limited to the immediate neighbors but can extend to more distant entities. For example:\n- **lunch** is related to **buy** and **call**.\n- **buy** is related to **call**.\n- **call** is related to **eat**.\n- **eating** is related to **less** and **monopoly**.\n- **eating** is related to **phone** and **friends**.\n- **have lunch** is related to **eat**.\n- **eat** is related to **monopoly**.\n- **calls** is related to **phone** and **monopoly**.\n- **phone calls** is related to **monopoly**.\n- **monopoly money** is related to **with friends**.\n\n### Analysis\nThe figure demonstrates how a knowledge graph can be used to capture and represent relationships between entities. The simple KG on the left shows basic relationships, while the more complex KG on the right shows how these relationships can be extended to include more distant entities. This allows for a more comprehensive understanding of the relationships between different entities, which can be useful in various applications such as natural language processing, information retrieval, and knowledge management.\n\nIn summary, the figure effectively illustrates the power of knowledge graphs in capturing and representing complex relationships between entities, highlighting the potential for further exploration and application in different fields.'
+[2026-09-25T19:07:35Z] Qwen3-VL smoke inference
+Qwen pixel budget: min_pixels=262144 max_pixels=1310720 via min_pixels/max_pixels
+Fetching 4 files:   0%|          | 0/4 [00:00<?, ?it/s]Fetching 4 files: 100%|██████████| 4/4 [00:00<00:00, 904.29it/s]
+Loading weights:   0%|          | 0/750 [00:00<?, ?it/s]Loading weights: 100%|██████████| 750/750 [00:00<00:00, 11374.73it/s]
+Loaded Qwen with dtype=torch.bfloat16; resolved dtype=torch.bfloat16
+[transformers] The following generation flags are not valid and may be ignored: ['temperature', 'top_p', 'top_k']. Set `TRANSFORMERS_VERBOSITY=info` for more details.
+Qwen3-VL result: 'Based on the provided graph, here are the visible nodes, categorized by their appearance'
+[2026-09-25T19:08:10Z] Gemma 3 smoke inference
+[transformers] The `use_fast` parameter is deprecated and will be removed in a future version. Use `backend="torchvision"` instead of `use_fast=True`, or `backend="pil"` instead of `use_fast=False`.
+Traceback (most recent call last):
+  File "<stdin>", line 26, in <module>
+  File "/workspace/bachelorArbeit/scripts/gemma3_common.py", line 109, in load_processor
+    raise RuntimeError(f'Processor has no resolved {key}; specify its CLI control')
+RuntimeError: Processor has no resolved pan_and_scan_min_crop_size; specify its CLI control
+[2026-09-25T19:08:19Z] ERROR line 232: "${QWEN_ENV}/bin/python" - "${SMOKE_IMAGE}" "${REPO_ROOT}" "${GEMMA_ID}" "${GEMMA_REV}" <<'PY'
+import sys
+from argparse import Namespace
+from pathlib import Path
+from PIL import Image
+import torch
+from transformers import AutoProcessor, Gemma3ForConditionalGeneration
+
+image_path, repo_root, model_id, revision = sys.argv[1:]
+sys.path.insert(0, str(Path(repo_root) / "scripts"))
+import gemma3_common as gemma
+
+args = Namespace(
+    model_id=model_id,
+    revision=revision,
+    seed=13,
+    attn_impl="eager",
+    pan_and_scan=True,
+    # Match eval_gemma3_stage1.py CLI defaults. gemma.load_processor resolves
+    # these from the pinned processor and logs the concrete values it used.
+    pan_and_scan_min_crop_size=None,
+    pan_and_scan_max_num_crops=None,
+    pan_and_scan_min_ratio_to_activate=None,
+    cache_implementation="dynamic",
+    max_new_tokens=16,
+)
+processor, details = gemma.load_processor(AutoProcessor, args)
+model, _, _ = gemma.load_model(Gemma3ForConditionalGeneration, torch, args)
+image = Image.open(image_path).convert("RGB")
+body = "<image>\nList the visible graph nodes briefly."
+result, tokens, hit_limit, vision_tokens = gemma.infer_one(
+    model, processor, body, "image", image, args, torch, details
+)
+print(f"Gemma 3 result: {result!r}; generated_tokens={tokens}; hit_limit={hit_limit}; vision_tokens={vision_tokens}")
+PY
+ (exit 1)
+
+[2026-09-25T19:20:46Z] Runpod setup starting
+repository=/workspace/bachelorArbeit
+HF_HOME=/workspace/.cache/huggingface
+SYSTEM_PYTHON=/opt/conda/bin/python
+HF_TOKEN=set
+Python 3.11.13
+torch.__version__=2.8.0+cu128
+torch.version.cuda=12.8
+torch.cuda.is_available()=True
+torch.cuda.device=NVIDIA RTX PRO 6000 Blackwell Server Edition
+torch.cuda.running_arch=sm_120
+torch.cuda.get_arch_list()=['sm_70', 'sm_75', 'sm_80', 'sm_86', 'sm_90', 'sm_100', 'sm_120']
+Hit:1 http://archive.ubuntu.com/ubuntu jammy InRelease
+Hit:2 http://archive.ubuntu.com/ubuntu jammy-updates InRelease
+Hit:3 https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64  InRelease
+Hit:4 http://archive.ubuntu.com/ubuntu jammy-backports InRelease
+Hit:5 http://security.ubuntu.com/ubuntu jammy-security InRelease
+Reading package lists...
+Reading package lists...
+Building dependency tree...
+Reading state information...
+rsync is already the newest version (3.2.7-0ubuntu0.22.04.7).
+tmux is already the newest version (3.2a-4ubuntu0.2).
+graphviz is already the newest version (2.42.2-6ubuntu0.1).
+0 upgraded, 0 newly installed, 0 to remove and 110 not upgraded.
+rsync  version 3.2.7  protocol version 31
+tmux 3.2a
+dot - graphviz version 2.43.0 (0)
+smoke_image=/workspace/smoke/graph.png
+smoke_image_bytes=299193
+Requirement already satisfied: pip in /workspace/venvs/venv_ocr2/lib/python3.11/site-packages (26.2.1)
+Requirement already satisfied: pip in /workspace/venvs/venv_qwen/lib/python3.11/site-packages (26.2.1)
+Requirement already satisfied: transformers==4.46.3 in /workspace/venvs/venv_ocr2/lib/python3.11/site-packages (4.46.3)
+Requirement already satisfied: pillow in /workspace/venvs/venv_ocr2/lib/python3.11/site-packages (12.3.0)
+Requirement already satisfied: packaging in /workspace/venvs/venv_ocr2/lib/python3.11/site-packages (26.3)
+Requirement already satisfied: numpy in /workspace/venvs/venv_ocr2/lib/python3.11/site-packages (2.4.6)
+Requirement already satisfied: requests in /workspace/venvs/venv_ocr2/lib/python3.11/site-packages (2.34.2)
+Requirement already satisfied: tqdm in /workspace/venvs/venv_ocr2/lib/python3.11/site-packages (4.70.1)
+Requirement already satisfied: einops in /workspace/venvs/venv_ocr2/lib/python3.11/site-packages (0.8.2)
+Requirement already satisfied: addict in /workspace/venvs/venv_ocr2/lib/python3.11/site-packages (2.4.0)
+Requirement already satisfied: accelerate in /workspace/venvs/venv_ocr2/lib/python3.11/site-packages (1.15.0)
+Requirement already satisfied: sentencepiece in /workspace/venvs/venv_ocr2/lib/python3.11/site-packages (0.2.2)
+Requirement already satisfied: safetensors in /workspace/venvs/venv_ocr2/lib/python3.11/site-packages (0.8.0)
+Requirement already satisfied: filelock in /opt/conda/lib/python3.11/site-packages (from transformers==4.46.3) (3.18.0)
+Requirement already satisfied: huggingface-hub<1.0,>=0.23.2 in /workspace/venvs/venv_ocr2/lib/python3.11/site-packages (from transformers==4.46.3) (0.36.2)
+Requirement already satisfied: pyyaml>=5.1 in /opt/conda/lib/python3.11/site-packages (from transformers==4.46.3) (6.0.2)
+Requirement already satisfied: regex!=2019.12.17 in /workspace/venvs/venv_ocr2/lib/python3.11/site-packages (from transformers==4.46.3) (2026.9.10)
+Requirement already satisfied: tokenizers<0.21,>=0.20 in /workspace/venvs/venv_ocr2/lib/python3.11/site-packages (from transformers==4.46.3) (0.20.3)
+Requirement already satisfied: fsspec>=2023.5.0 in /opt/conda/lib/python3.11/site-packages (from huggingface-hub<1.0,>=0.23.2->transformers==4.46.3) (2025.7.0)
+Requirement already satisfied: hf-xet<2.0.0,>=1.1.3 in /workspace/venvs/venv_ocr2/lib/python3.11/site-packages (from huggingface-hub<1.0,>=0.23.2->transformers==4.46.3) (1.6.0)
+Requirement already satisfied: typing-extensions>=3.7.4.3 in /opt/conda/lib/python3.11/site-packages (from huggingface-hub<1.0,>=0.23.2->transformers==4.46.3) (4.14.1)
+Requirement already satisfied: charset_normalizer<4,>=2 in /opt/conda/lib/python3.11/site-packages (from requests) (3.4.2)
+Requirement already satisfied: idna<4,>=2.5 in /opt/conda/lib/python3.11/site-packages (from requests) (3.10)
+Requirement already satisfied: urllib3<3,>=1.26 in /opt/conda/lib/python3.11/site-packages (from requests) (2.5.0)
+Requirement already satisfied: certifi>=2023.5.7 in /opt/conda/lib/python3.11/site-packages (from requests) (2025.8.3)
+Requirement already satisfied: psutil in /opt/conda/lib/python3.11/site-packages (from accelerate) (7.0.0)
+Requirement already satisfied: torch>=2.0.0 in /opt/conda/lib/python3.11/site-packages (from accelerate) (2.8.0+cu128)
+Requirement already satisfied: sympy>=1.13.3 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (1.14.0)
+Requirement already satisfied: networkx in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (3.5)
+Requirement already satisfied: jinja2 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (3.1.6)
+Requirement already satisfied: nvidia-cuda-nvrtc-cu12==12.8.93 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.8.93)
+Requirement already satisfied: nvidia-cuda-runtime-cu12==12.8.90 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.8.90)
+Requirement already satisfied: nvidia-cuda-cupti-cu12==12.8.90 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.8.90)
+Requirement already satisfied: nvidia-cudnn-cu12==9.10.2.21 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (9.10.2.21)
+Requirement already satisfied: nvidia-cublas-cu12==12.8.4.1 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.8.4.1)
+Requirement already satisfied: nvidia-cufft-cu12==11.3.3.83 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (11.3.3.83)
+Requirement already satisfied: nvidia-curand-cu12==10.3.9.90 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (10.3.9.90)
+Requirement already satisfied: nvidia-cusolver-cu12==11.7.3.90 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (11.7.3.90)
+Requirement already satisfied: nvidia-cusparse-cu12==12.5.8.93 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.5.8.93)
+Requirement already satisfied: nvidia-cusparselt-cu12==0.7.1 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (0.7.1)
+Requirement already satisfied: nvidia-nccl-cu12==2.27.3 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (2.27.3)
+Requirement already satisfied: nvidia-nvtx-cu12==12.8.90 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.8.90)
+Requirement already satisfied: nvidia-nvjitlink-cu12==12.8.93 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.8.93)
+Requirement already satisfied: nvidia-cufile-cu12==1.13.1.3 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (1.13.1.3)
+Requirement already satisfied: triton==3.4.0 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (3.4.0)
+Requirement already satisfied: setuptools>=40.8.0 in /workspace/venvs/venv_ocr2/lib/python3.11/site-packages (from triton==3.4.0->torch>=2.0.0->accelerate) (65.5.0)
+Requirement already satisfied: mpmath<1.4,>=1.1.0 in /opt/conda/lib/python3.11/site-packages (from sympy>=1.13.3->torch>=2.0.0->accelerate) (1.3.0)
+Requirement already satisfied: MarkupSafe>=2.0 in /opt/conda/lib/python3.11/site-packages (from jinja2->torch>=2.0.0->accelerate) (3.0.2)
+Requirement already satisfied: transformers==5.16.1 in /workspace/venvs/venv_qwen/lib/python3.11/site-packages (5.16.1)
+Requirement already satisfied: pillow in /workspace/venvs/venv_qwen/lib/python3.11/site-packages (12.3.0)
+Requirement already satisfied: packaging in /workspace/venvs/venv_qwen/lib/python3.11/site-packages (26.3)
+Requirement already satisfied: numpy in /workspace/venvs/venv_qwen/lib/python3.11/site-packages (2.4.6)
+Requirement already satisfied: accelerate in /workspace/venvs/venv_qwen/lib/python3.11/site-packages (1.15.0)
+Requirement already satisfied: sentencepiece in /workspace/venvs/venv_qwen/lib/python3.11/site-packages (0.2.2)
+Requirement already satisfied: safetensors in /workspace/venvs/venv_qwen/lib/python3.11/site-packages (0.8.0)
+Requirement already satisfied: huggingface-hub<2.0,>=1.5.0 in /workspace/venvs/venv_qwen/lib/python3.11/site-packages (from transformers==5.16.1) (1.33.0)
+Requirement already satisfied: pyyaml>=5.1 in /opt/conda/lib/python3.11/site-packages (from transformers==5.16.1) (6.0.2)
+Requirement already satisfied: regex>=2025.10.22 in /workspace/venvs/venv_qwen/lib/python3.11/site-packages (from transformers==5.16.1) (2026.9.10)
+Requirement already satisfied: tokenizers<0.24.0,>=0.23.1 in /workspace/venvs/venv_qwen/lib/python3.11/site-packages (from transformers==5.16.1) (0.23.2)
+Requirement already satisfied: typer in /workspace/venvs/venv_qwen/lib/python3.11/site-packages (from transformers==5.16.1) (0.27.2)
+Requirement already satisfied: tqdm>=4.60 in /opt/conda/lib/python3.11/site-packages (from transformers==5.16.1) (4.67.1)
+Requirement already satisfied: click<9.0.0,>=8.4.2 in /workspace/venvs/venv_qwen/lib/python3.11/site-packages (from huggingface-hub<2.0,>=1.5.0->transformers==5.16.1) (8.5.0)
+Requirement already satisfied: filelock>=3.10.0 in /opt/conda/lib/python3.11/site-packages (from huggingface-hub<2.0,>=1.5.0->transformers==5.16.1) (3.18.0)
+Requirement already satisfied: fsspec>=2023.5.0 in /opt/conda/lib/python3.11/site-packages (from huggingface-hub<2.0,>=1.5.0->transformers==5.16.1) (2025.7.0)
+Requirement already satisfied: hf-xet<2.0.0,>=1.6.0 in /workspace/venvs/venv_qwen/lib/python3.11/site-packages (from huggingface-hub<2.0,>=1.5.0->transformers==5.16.1) (1.6.0)
+Requirement already satisfied: httpx<1,>=0.23.0 in /workspace/venvs/venv_qwen/lib/python3.11/site-packages (from huggingface-hub<2.0,>=1.5.0->transformers==5.16.1) (0.28.1)
+Requirement already satisfied: typing-extensions>=4.1.0 in /workspace/venvs/venv_qwen/lib/python3.11/site-packages (from huggingface-hub<2.0,>=1.5.0->transformers==5.16.1) (4.16.0)
+Requirement already satisfied: anyio in /workspace/venvs/venv_qwen/lib/python3.11/site-packages (from httpx<1,>=0.23.0->huggingface-hub<2.0,>=1.5.0->transformers==5.16.1) (4.15.1)
+Requirement already satisfied: certifi in /opt/conda/lib/python3.11/site-packages (from httpx<1,>=0.23.0->huggingface-hub<2.0,>=1.5.0->transformers==5.16.1) (2025.8.3)
+Requirement already satisfied: httpcore==1.* in /workspace/venvs/venv_qwen/lib/python3.11/site-packages (from httpx<1,>=0.23.0->huggingface-hub<2.0,>=1.5.0->transformers==5.16.1) (1.0.9)
+Requirement already satisfied: idna in /opt/conda/lib/python3.11/site-packages (from httpx<1,>=0.23.0->huggingface-hub<2.0,>=1.5.0->transformers==5.16.1) (3.10)
+Requirement already satisfied: h11>=0.16 in /workspace/venvs/venv_qwen/lib/python3.11/site-packages (from httpcore==1.*->httpx<1,>=0.23.0->huggingface-hub<2.0,>=1.5.0->transformers==5.16.1) (0.16.0)
+Requirement already satisfied: psutil in /opt/conda/lib/python3.11/site-packages (from accelerate) (7.0.0)
+Requirement already satisfied: torch>=2.0.0 in /opt/conda/lib/python3.11/site-packages (from accelerate) (2.8.0+cu128)
+Requirement already satisfied: sympy>=1.13.3 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (1.14.0)
+Requirement already satisfied: networkx in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (3.5)
+Requirement already satisfied: jinja2 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (3.1.6)
+Requirement already satisfied: nvidia-cuda-nvrtc-cu12==12.8.93 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.8.93)
+Requirement already satisfied: nvidia-cuda-runtime-cu12==12.8.90 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.8.90)
+Requirement already satisfied: nvidia-cuda-cupti-cu12==12.8.90 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.8.90)
+Requirement already satisfied: nvidia-cudnn-cu12==9.10.2.21 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (9.10.2.21)
+Requirement already satisfied: nvidia-cublas-cu12==12.8.4.1 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.8.4.1)
+Requirement already satisfied: nvidia-cufft-cu12==11.3.3.83 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (11.3.3.83)
+Requirement already satisfied: nvidia-curand-cu12==10.3.9.90 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (10.3.9.90)
+Requirement already satisfied: nvidia-cusolver-cu12==11.7.3.90 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (11.7.3.90)
+Requirement already satisfied: nvidia-cusparse-cu12==12.5.8.93 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.5.8.93)
+Requirement already satisfied: nvidia-cusparselt-cu12==0.7.1 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (0.7.1)
+Requirement already satisfied: nvidia-nccl-cu12==2.27.3 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (2.27.3)
+Requirement already satisfied: nvidia-nvtx-cu12==12.8.90 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.8.90)
+Requirement already satisfied: nvidia-nvjitlink-cu12==12.8.93 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (12.8.93)
+Requirement already satisfied: nvidia-cufile-cu12==1.13.1.3 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (1.13.1.3)
+Requirement already satisfied: triton==3.4.0 in /opt/conda/lib/python3.11/site-packages (from torch>=2.0.0->accelerate) (3.4.0)
+Requirement already satisfied: setuptools>=40.8.0 in /workspace/venvs/venv_qwen/lib/python3.11/site-packages (from triton==3.4.0->torch>=2.0.0->accelerate) (65.5.0)
+Requirement already satisfied: mpmath<1.4,>=1.1.0 in /opt/conda/lib/python3.11/site-packages (from sympy>=1.13.3->torch>=2.0.0->accelerate) (1.3.0)
+Requirement already satisfied: MarkupSafe>=2.0 in /opt/conda/lib/python3.11/site-packages (from jinja2->torch>=2.0.0->accelerate) (3.0.2)
+Requirement already satisfied: shellingham>=1.3.0 in /workspace/venvs/venv_qwen/lib/python3.11/site-packages (from typer->transformers==5.16.1) (1.5.4)
+Requirement already satisfied: rich>=13.8.0 in /workspace/venvs/venv_qwen/lib/python3.11/site-packages (from typer->transformers==5.16.1) (15.0.0)
+Requirement already satisfied: annotated-doc>=0.0.2 in /workspace/venvs/venv_qwen/lib/python3.11/site-packages (from typer->transformers==5.16.1) (0.0.5)
+Requirement already satisfied: markdown-it-py>=2.2.0 in /workspace/venvs/venv_qwen/lib/python3.11/site-packages (from rich>=13.8.0->typer->transformers==5.16.1) (4.2.0)
+Requirement already satisfied: pygments<3.0.0,>=2.13.0 in /opt/conda/lib/python3.11/site-packages (from rich>=13.8.0->typer->transformers==5.16.1) (2.19.2)
+Requirement already satisfied: mdurl~=0.1 in /workspace/venvs/venv_qwen/lib/python3.11/site-packages (from markdown-it-py>=2.2.0->rich>=13.8.0->typer->transformers==5.16.1) (0.1.2)
+env=/workspace/venvs/venv_ocr2
+python=3.11.13
+torch=2.8.0+cu128; cuda=12.8; transformers=4.46.3
+env=/workspace/venvs/venv_qwen
+python=3.11.13
+torch=2.8.0+cu128; cuda=12.8; transformers=5.16.1
+Fetching 16 files:   0%|          | 0/16 [00:00<?, ?it/s]Fetching 16 files: 100%|██████████| 16/16 [00:00<00:00, 1305.21it/s]
+cached deepseek-ai/DeepSeek-OCR-2@aaa02f3811945a91062062994c5c4a3f4c0af2b0 at /workspace/.cache/huggingface/hub/models--deepseek-ai--DeepSeek-OCR-2/snapshots/aaa02f3811945a91062062994c5c4a3f4c0af2b0
+Fetching 16 files:   0%|          | 0/16 [00:00<?, ?it/s]Fetching 16 files: 100%|██████████| 16/16 [00:00<00:00, 2373.10it/s]
+cached Qwen/Qwen3-VL-8B-Instruct@0c351dd01ed87e9c1b53cbc748cba10e6187ff3b at /workspace/.cache/huggingface/hub/models--Qwen--Qwen3-VL-8B-Instruct/snapshots/0c351dd01ed87e9c1b53cbc748cba10e6187ff3b
+Fetching 18 files:   0%|          | 0/18 [00:00<?, ?it/s]Fetching 18 files: 100%|██████████| 18/18 [00:00<00:00, 2598.88it/s]
+cached google/gemma-3-12b-it@96b6f1eccf38110c56df3a15bffe176da04bfd80 at /workspace/.cache/huggingface/hub/models--google--gemma-3-12b-it/snapshots/96b6f1eccf38110c56df3a15bffe176da04bfd80
+[2026-09-25T19:21:02Z] DeepSeek-OCR-2 smoke inference
+You are using a model of type deepseek_vl_v2 to instantiate a model of type DeepseekOCR2. This is not supported for all configurations of models and can yield errors.
+/workspace/venvs/venv_ocr2/lib/python3.11/site-packages/transformers/generation/configuration_utils.py:590: UserWarning: `do_sample` is set to `False`. However, `temperature` is set to `0.0` -- this flag is only used in sample-based generation modes. You should set `do_sample=True` or unset `temperature`.
+  warnings.warn(
+The attention mask and the pad token id were not set. As a consequence, you may observe unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results.
+Setting `pad_token_id` to `eos_token_id`:None for open-end generation.
+The attention mask is not set and cannot be inferred from input because pad token is same as eos token. As a consequence, you may observe unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results.
+The `seen_tokens` attribute is deprecated and will be removed in v4.41. Use the `cache_position` model input instead.
+`get_max_cache()` is deprecated for all Cache classes. Use `get_max_cache_shape()` instead. Calling `get_max_cache()` will raise error from v4.48
+The attention layers in this model are transitioning from computing the RoPE embeddings internally through `position_ids` (2D tensor with the indexes of the tokens), to using externally computed `position_embeddings` (Tuple of tensors, containing cos and sin). In v4.46 `position_ids` will be removed and `position_embeddings` will be mandatory.
+=====================
+BASE:  torch.Size([1, 256, 1280])
+PATCHES:  torch.Size([6, 144, 1280])
+=====================
+DeepSeek-OCR-2 result: 'The figure illustrates the concept of a knowledge graph (KG) and its application in identifying relationships between entities. It is divided into two main sections: the left side shows a simple KG, and the right side demonstrates how the KG can be used to find relationships between entities.\n\n### Left Side: Simple KG\nThe left side of the figure shows a basic knowledge graph with four nodes connected by edges. The nodes are labeled as follows:\n1. **good**\n2. **money**\n3. **start**\n4. **looking**\n\nEach node is associated with an antonym or related term:\n- **good** is related to **antonym**.\n- **money** is related to **related to**.\n- **start** is related to **related to**.\n- **looking** is related to **related to**.\n\nThese nodes are connected by edges, indicating relationships between them. The edges are labeled with the terms "best," "nice," "end," and "look."\n\n### Right Side: KG with Connections\nThe right side of the figure shows a more complex KG with additional connections and relationships. The nodes are labeled with various terms, and the edges represent the relationships between them. The terms are as follows:\n- **lunch**\n- **buy**\n- **call**\n- **eat**\n- **eating**\n- **less**\n- **monopoly**\n- **phone**\n- **friends**\n- **phone call**\n- **eating lunch**\n- **have lunch**\n- **eat lunch**\n- **calls**\n- **phone calls**\n- **monopoly money**\n- **with friends**\n\nThe connections between nodes indicate that the relationships are not just limited to the immediate neighbors but can extend to more distant entities. For example:\n- **lunch** is related to **buy** and **call**.\n- **buy** is related to **call**.\n- **call** is related to **eat**.\n- **eating** is related to **less** and **monopoly**.\n- **eating** is related to **phone** and **friends**.\n- **have lunch** is related to **eat**.\n- **eat** is related to **monopoly**.\n- **calls** is related to **phone** and **monopoly**.\n- **phone calls** is related to **monopoly**.\n- **monopoly money** is related to **with friends**.\n\n### Analysis\nThe figure demonstrates how a knowledge graph can be used to capture and represent relationships between entities. The simple KG on the left shows basic relationships, while the more complex KG on the right shows how these relationships can be extended to include more distant entities. This allows for a more comprehensive understanding of the relationships between different entities, which can be useful in various applications such as natural language processing, information retrieval, and knowledge management.\n\nIn summary, the figure effectively illustrates the power of knowledge graphs in capturing and representing complex relationships between entities, highlighting the potential for further exploration and application in different fields.'
+[2026-09-25T19:21:44Z] Qwen3-VL smoke inference
+Qwen pixel budget: min_pixels=262144 max_pixels=1310720 via min_pixels/max_pixels
+Fetching 4 files:   0%|          | 0/4 [00:00<?, ?it/s]Fetching 4 files: 100%|██████████| 4/4 [00:00<00:00, 916.84it/s]
+Loading weights:   0%|          | 0/750 [00:00<?, ?it/s]Loading weights:   8%|▊         | 59/750 [00:00<00:01, 541.41it/s]Loading weights:  19%|█▊        | 140/750 [00:00<00:00, 687.68it/s]Loading weights:  28%|██▊       | 210/750 [00:00<00:01, 533.69it/s]Loading weights:  37%|███▋      | 274/750 [00:00<00:00, 566.14it/s]Loading weights:  52%|█████▏    | 387/750 [00:00<00:00, 731.11it/s]Loading weights: 100%|██████████| 750/750 [00:00<00:00, 1107.79it/s]
+Loaded Qwen with dtype=torch.bfloat16; resolved dtype=torch.bfloat16
+[transformers] The following generation flags are not valid and may be ignored: ['temperature', 'top_p', 'top_k']. Set `TRANSFORMERS_VERBOSITY=info` for more details.
+Qwen3-VL result: 'Based on the provided graph, here are the visible nodes, categorized by their appearance'
+[2026-09-25T19:22:37Z] Gemma 3 smoke inference
+[transformers] The `use_fast` parameter is deprecated and will be removed in a future version. Use `backend="torchvision"` instead of `use_fast=True`, or `backend="pil"` instead of `use_fast=False`.
+GEMMA PROCESSOR: {"class": "Gemma3ImageProcessorPil", "pan_and_scan_kwargs": {"pan_and_scan_max_num_crops": 4, "pan_and_scan_min_crop_size": 256, "pan_and_scan_min_ratio_to_activate": 1.2}, "size": {"height": 896, "width": 896}, "use_fast": false, "verified_kwargs_typeddicts": ["Gemma3ImageProcessorKwargs", "Gemma3ImageProcessorKwargs"], "verified_signatures": {"__init__": "(self, **kwargs: *<class 'transformers.models.gemma3.image_processing_pil_gemma3.Gemma3ImageProcessorKwargs'>)", "preprocess": "(self, images: Union[ForwardRef('PIL.Image.Image'), numpy.ndarray, ForwardRef('torch.Tensor'), list['PIL.Image.Image'], list[numpy.ndarray], list['torch.Tensor']], **kwargs: *<class 'transformers.models.gemma3.image_processing_pil_gemma3.Gemma3ImageProcessorKwargs'>) -> transformers.image_processing_base.BatchFeature"}}
+Fetching 5 files:   0%|          | 0/5 [00:00<?, ?it/s]Fetching 5 files: 100%|██████████| 5/5 [00:00<00:00, 1172.31it/s]
+Loading weights:   0%|          | 0/1065 [00:00<?, ?it/s]Loading weights:   0%|          | 1/1065 [00:02<47:23,  2.67s/it]Loading weights:   0%|          | 3/1065 [00:02<13:21,  1.33it/s]Loading weights:   0%|          | 4/1065 [00:03<09:51,  1.79it/s]Loading weights:   0%|          | 5/1065 [00:03<07:45,  2.28it/s]Loading weights:   2%|▏         | 16/1065 [00:03<01:35, 10.94it/s]Loading weights:   2%|▏         | 18/1065 [00:03<01:38, 10.64it/s]Loading weights:   2%|▏         | 24/1065 [00:03<01:05, 15.92it/s]Loading weights:   3%|▎         | 27/1065 [00:03<01:02, 16.58it/s]Loading weights:   3%|▎         | 30/1065 [00:04<01:13, 14.05it/s]Loading weights:   3%|▎         | 32/1065 [00:04<01:20, 12.82it/s]Loading weights:   4%|▍         | 40/1065 [00:04<00:58, 17.46it/s]Loading weights:   4%|▍         | 43/1065 [00:05<01:07, 15.11it/s]Loading weights:   5%|▍         | 51/1065 [00:05<00:44, 23.04it/s]Loading weights:   5%|▌         | 55/1065 [00:05<00:55, 18.19it/s]Loading weights:   5%|▌         | 58/1065 [00:06<01:25, 11.74it/s]Loading weights:   6%|▌         | 63/1065 [00:06<01:05, 15.19it/s]Loading weights:   6%|▋         | 68/1065 [00:06<00:59, 16.64it/s]Loading weights:   7%|▋         | 71/1065 [00:06<01:10, 14.01it/s]Loading weights:   8%|▊         | 81/1065 [00:07<00:52, 18.76it/s]Loading weights:   8%|▊         | 84/1065 [00:07<00:54, 17.89it/s]Loading weights:   8%|▊         | 88/1065 [00:07<00:48, 20.08it/s]Loading weights:   9%|▉         | 94/1065 [00:07<00:48, 19.86it/s]Loading weights:   9%|▉         | 97/1065 [00:08<00:54, 17.77it/s]Loading weights:  10%|▉         | 105/1065 [00:08<00:38, 25.24it/s]Loading weights:  10%|█         | 109/1065 [00:08<00:59, 16.03it/s]Loading weights:  11%|█▏        | 120/1065 [00:09<00:40, 23.19it/s]Loading weights:  12%|█▏        | 123/1065 [00:09<00:47, 19.84it/s]Loading weights:  12%|█▏        | 132/1065 [00:09<00:41, 22.43it/s]Loading weights:  13%|█▎        | 135/1065 [00:09<00:49, 18.74it/s]Loading weights:  13%|█▎        | 143/1065 [00:10<00:36, 25.08it/s]Loading weights:  14%|█▍        | 147/1065 [00:10<00:49, 18.43it/s]Loading weights:  14%|█▍        | 153/1065 [00:10<00:39, 23.30it/s]Loading weights:  15%|█▍        | 157/1065 [00:10<00:45, 19.87it/s]Loading weights:  15%|█▌        | 160/1065 [00:11<01:00, 14.84it/s]Loading weights:  15%|█▌        | 163/1065 [00:11<01:08, 13.14it/s]Loading weights:  16%|█▌        | 172/1065 [00:12<00:52, 16.88it/s]Loading weights:  16%|█▋        | 174/1065 [00:12<01:07, 13.25it/s]Loading weights:  17%|█▋        | 185/1065 [00:12<00:46, 19.11it/s]Loading weights:  18%|█▊        | 188/1065 [00:12<00:46, 18.82it/s]Loading weights:  18%|█▊        | 193/1065 [00:13<00:40, 21.65it/s]Loading weights:  18%|█▊        | 196/1065 [00:13<00:39, 22.11it/s]Loading weights:  19%|█▊        | 199/1065 [00:13<00:55, 15.50it/s]Loading weights:  19%|█▉        | 201/1065 [00:13<00:57, 14.99it/s]Loading weights:  19%|█▉        | 207/1065 [00:13<00:39, 21.48it/s]Loading weights:  20%|█▉        | 211/1065 [00:14<00:42, 20.26it/s]Loading weights:  20%|██        | 214/1065 [00:14<01:02, 13.55it/s]Loading weights:  21%|██        | 219/1065 [00:14<00:49, 17.12it/s]Loading weights:  21%|██        | 224/1065 [00:15<00:58, 14.27it/s]Loading weights:  21%|██        | 226/1065 [00:15<00:59, 14.20it/s]Loading weights:  22%|██▏       | 231/1065 [00:15<00:48, 17.12it/s]Loading weights:  22%|██▏       | 234/1065 [00:15<00:45, 18.24it/s]Loading weights:  22%|██▏       | 237/1065 [00:16<01:02, 13.28it/s]Loading weights:  22%|██▏       | 239/1065 [00:16<01:11, 11.52it/s]Loading weights:  23%|██▎       | 244/1065 [00:16<00:52, 15.71it/s]Loading weights:  23%|██▎       | 246/1065 [00:16<00:51, 15.97it/s]Loading weights:  23%|██▎       | 250/1065 [00:16<00:50, 16.07it/s]Loading weights:  24%|██▎       | 252/1065 [00:17<01:11, 11.44it/s]Loading weights:  25%|██▍       | 261/1065 [00:17<00:35, 22.37it/s]Loading weights:  25%|██▍       | 265/1065 [00:17<00:53, 14.84it/s]Loading weights:  25%|██▌       | 271/1065 [00:18<00:42, 18.66it/s]Loading weights:  26%|██▌       | 276/1065 [00:18<00:41, 19.10it/s]Loading weights:  26%|██▌       | 279/1065 [00:18<00:47, 16.52it/s]Loading weights:  26%|██▋       | 282/1065 [00:18<00:42, 18.33it/s]Loading weights:  27%|██▋       | 288/1065 [00:18<00:39, 19.60it/s]Loading weights:  27%|██▋       | 291/1065 [00:19<00:47, 16.46it/s]Loading weights:  28%|██▊       | 297/1065 [00:19<00:38, 20.18it/s]Loading weights:  28%|██▊       | 300/1065 [00:19<00:35, 21.38it/s]Loading weights:  28%|██▊       | 303/1065 [00:20<00:58, 12.99it/s]Loading weights:  29%|██▊       | 305/1065 [00:20<00:58, 12.90it/s]Loading weights:  29%|██▉       | 310/1065 [00:20<00:44, 17.07it/s]Loading weights:  30%|██▉       | 315/1065 [00:20<00:46, 16.20it/s]Loading weights:  30%|██▉       | 317/1065 [00:21<01:00, 12.28it/s]Loading weights:  30%|███       | 322/1065 [00:21<00:47, 15.80it/s]Loading weights:  31%|███       | 326/1065 [00:21<00:39, 18.64it/s]Loading weights:  31%|███       | 329/1065 [00:21<00:56, 12.95it/s]Loading weights:  31%|███       | 331/1065 [00:21<00:55, 13.21it/s]Loading weights:  31%|███▏      | 334/1065 [00:22<00:47, 15.49it/s]Loading weights:  32%|███▏      | 339/1065 [00:22<00:36, 19.69it/s]Loading weights:  32%|███▏      | 342/1065 [00:22<01:00, 11.96it/s]Loading weights:  32%|███▏      | 344/1065 [00:22<01:05, 10.97it/s]Loading weights:  33%|███▎      | 349/1065 [00:23<00:51, 13.98it/s]Loading weights:  33%|███▎      | 351/1065 [00:23<00:53, 13.25it/s]Loading weights:  33%|███▎      | 354/1065 [00:23<00:58, 12.18it/s]Loading weights:  33%|███▎      | 356/1065 [00:24<01:14,  9.49it/s]Loading weights:  34%|███▍      | 362/1065 [00:24<00:45, 15.48it/s]Loading weights:  34%|███▍      | 365/1065 [00:24<00:41, 16.82it/s]Loading weights:  35%|███▍      | 368/1065 [00:24<00:54, 12.71it/s]Loading weights:  35%|███▍      | 370/1065 [00:24<00:55, 12.45it/s]Loading weights:  35%|███▌      | 375/1065 [00:24<00:39, 17.52it/s]Loading weights:  36%|███▌      | 380/1065 [00:25<00:46, 14.78it/s]Loading weights:  36%|███▌      | 382/1065 [00:25<01:02, 10.97it/s]Loading weights:  37%|███▋      | 389/1065 [00:25<00:39, 17.24it/s]Loading weights:  37%|███▋      | 393/1065 [00:26<00:39, 16.91it/s]Loading weights:  37%|███▋      | 396/1065 [00:26<00:49, 13.52it/s]Loading weights:  38%|███▊      | 401/1065 [00:26<00:45, 14.44it/s]Loading weights:  38%|███▊      | 406/1065 [00:27<00:53, 12.43it/s]Loading weights:  38%|███▊      | 408/1065 [00:27<01:04, 10.20it/s]Loading weights:  39%|███▉      | 416/1065 [00:27<00:40, 16.20it/s]Loading weights:  39%|███▉      | 419/1065 [00:28<00:47, 13.63it/s]Loading weights:  40%|███▉      | 421/1065 [00:28<00:58, 11.01it/s]Loading weights:  40%|████      | 426/1065 [00:28<00:42, 14.87it/s]Loading weights:  40%|████      | 430/1065 [00:28<00:35, 18.14it/s]Loading weights:  41%|████      | 433/1065 [00:29<00:46, 13.47it/s]Loading weights:  41%|████      | 436/1065 [00:29<00:45, 13.69it/s]Loading weights:  41%|████      | 438/1065 [00:29<00:47, 13.17it/s]Loading weights:  42%|████▏     | 443/1065 [00:29<00:34, 17.95it/s]Loading weights:  42%|████▏     | 446/1065 [00:30<00:50, 12.17it/s]Loading weights:  42%|████▏     | 448/1065 [00:30<00:47, 13.05it/s]Loading weights:  43%|████▎     | 453/1065 [00:30<00:33, 18.30it/s]Loading weights:  43%|████▎     | 458/1065 [00:30<00:31, 19.05it/s]Loading weights:  43%|████▎     | 461/1065 [00:31<00:38, 15.74it/s]Loading weights:  44%|████▎     | 465/1065 [00:31<00:35, 17.06it/s]Loading weights:  44%|████▍     | 469/1065 [00:31<00:30, 19.52it/s]Loading weights:  44%|████▍     | 472/1065 [00:31<00:39, 14.97it/s]Loading weights:  45%|████▍     | 474/1065 [00:31<00:43, 13.55it/s]Loading weights:  45%|████▍     | 478/1065 [00:32<00:33, 17.34it/s]Loading weights:  45%|████▌     | 483/1065 [00:32<00:25, 23.12it/s]Loading weights:  46%|████▌     | 486/1065 [00:32<00:46, 12.52it/s]Loading weights:  46%|████▌     | 491/1065 [00:32<00:35, 16.37it/s]Loading weights:  46%|████▋     | 495/1065 [00:32<00:29, 19.63it/s]Loading weights:  47%|████▋     | 498/1065 [00:33<00:38, 14.70it/s]Loading weights:  47%|████▋     | 501/1065 [00:33<00:41, 13.55it/s]Loading weights:  47%|████▋     | 505/1065 [00:33<00:37, 15.02it/s]Loading weights:  48%|████▊     | 510/1065 [00:34<00:34, 16.12it/s]Loading weights:  48%|████▊     | 512/1065 [00:34<00:46, 11.87it/s]Loading weights:  49%|████▊     | 518/1065 [00:34<00:30, 18.05it/s]Loading weights:  49%|████▉     | 521/1065 [00:35<00:43, 12.39it/s]Loading weights:  49%|████▉     | 524/1065 [00:35<00:43, 12.47it/s]Loading weights:  49%|████▉     | 526/1065 [00:35<00:42, 12.70it/s]Loading weights:  50%|████▉     | 530/1065 [00:35<00:33, 15.85it/s]Loading weights:  50%|█████     | 534/1065 [00:35<00:28, 18.79it/s]Loading weights:  50%|█████     | 537/1065 [00:36<00:35, 14.69it/s]Loading weights:  51%|█████     | 539/1065 [00:36<00:38, 13.81it/s]Loading weights:  51%|█████     | 544/1065 [00:36<00:29, 17.48it/s]Loading weights:  52%|█████▏    | 549/1065 [00:36<00:26, 19.48it/s]Loading weights:  52%|█████▏    | 552/1065 [00:37<00:41, 12.23it/s]Loading weights:  52%|█████▏    | 557/1065 [00:37<00:32, 15.84it/s]Loading weights:  53%|█████▎    | 562/1065 [00:37<00:29, 17.11it/s]Loading weights:  53%|█████▎    | 565/1065 [00:37<00:38, 13.10it/s]Loading weights:  54%|█████▎    | 572/1065 [00:38<00:32, 15.31it/s]Loading weights:  54%|█████▍    | 575/1065 [00:38<00:32, 15.25it/s]Loading weights:  54%|█████▍    | 577/1065 [00:38<00:46, 10.51it/s]Loading weights:  55%|█████▍    | 583/1065 [00:39<00:32, 15.00it/s]Loading weights:  55%|█████▌    | 586/1065 [00:39<00:30, 15.73it/s]Loading weights:  55%|█████▌    | 588/1065 [00:39<00:37, 12.89it/s]Loading weights:  55%|█████▌    | 590/1065 [00:39<00:44, 10.65it/s]Loading weights:  56%|█████▌    | 596/1065 [00:40<00:32, 14.26it/s]Loading weights:  56%|█████▋    | 601/1065 [00:40<00:31, 14.70it/s]Loading weights:  57%|█████▋    | 603/1065 [00:40<00:39, 11.81it/s]Loading weights:  57%|█████▋    | 608/1065 [00:41<00:31, 14.58it/s]Loading weights:  58%|█████▊    | 614/1065 [00:41<00:24, 18.17it/s]Loading weights:  58%|█████▊    | 617/1065 [00:41<00:33, 13.44it/s]Loading weights:  59%|█████▊    | 624/1065 [00:41<00:22, 19.41it/s]Loading weights:  60%|██████    | 643/1065 [00:41<00:09, 43.75it/s]Loading weights:  63%|██████▎   | 669/1065 [00:42<00:05, 78.67it/s]Loading weights:  64%|██████▍   | 685/1065 [00:42<00:04, 92.23it/s]Loading weights:  67%|██████▋   | 717/1065 [00:42<00:02, 131.78it/s]Loading weights:  69%|██████▉   | 735/1065 [00:42<00:02, 138.89it/s]Loading weights:  71%|███████   | 752/1065 [00:42<00:02, 137.48it/s]Loading weights:  72%|███████▏  | 768/1065 [00:42<00:02, 130.91it/s]Loading weights:  74%|███████▎  | 783/1065 [00:42<00:02, 130.06it/s]Loading weights:  75%|███████▌  | 803/1065 [00:42<00:01, 146.68it/s]Loading weights:  77%|███████▋  | 819/1065 [00:42<00:01, 148.69it/s]Loading weights:  78%|███████▊  | 835/1065 [00:43<00:01, 150.79it/s]Loading weights:  80%|███████▉  | 851/1065 [00:43<00:01, 145.97it/s]Loading weights:  81%|████████▏ | 866/1065 [00:43<00:01, 146.30it/s]Loading weights:  83%|████████▎ | 887/1065 [00:43<00:01, 161.39it/s]Loading weights:  85%|████████▌ | 907/1065 [00:43<00:00, 164.26it/s]Loading weights:  87%|████████▋ | 927/1065 [00:43<00:00, 163.99it/s]Loading weights:  89%|████████▊ | 945/1065 [00:43<00:00, 164.65it/s]Loading weights:  91%|█████████ | 966/1065 [00:43<00:00, 174.89it/s]Loading weights:  93%|█████████▎| 988/1065 [00:43<00:00, 185.34it/s]Loading weights:  95%|█████████▍| 1007/1065 [00:44<00:00, 152.60it/s]Loading weights:  96%|█████████▌| 1024/1065 [00:44<00:00, 153.95it/s]Loading weights:  98%|█████████▊| 1041/1065 [00:44<00:00, 147.82it/s]Loading weights:  99%|█████████▉| 1057/1065 [00:44<00:00, 139.56it/s]Loading weights: 100%|██████████| 1065/1065 [00:44<00:00, 23.92it/s] 
+[transformers] Kwargs passed to `processor.__call__` have to be in `processor_kwargs` dict, not in `**kwargs`
+Gemma 3 result: "Here's a list of the visible graph nodes from the image:\n\n**"; generated_tokens=16; hit_limit=True; vision_tokens=3
+Wrote /workspace/logs/freeze_venv_ocr2.txt
+Wrote /workspace/logs/freeze_venv_qwen.txt
+[2026-09-25T19:23:36Z] Runpod setup and all three smoke inferences completed

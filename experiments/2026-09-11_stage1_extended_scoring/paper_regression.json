@@ -1,0 +1,16 @@
+{
+  "qwen": {
+    "byte_identical": true,
+    "saved_metrics_sha256": "e121f2691acfe93c9a7adf903fed52e3e27056b217bf4c6d646529294b1e369c",
+    "rescored_sha256": "e121f2691acfe93c9a7adf903fed52e3e27056b217bf4c6d646529294b1e369c",
+    "scorer_sha256": "986e4b9ba19e33119a7399323f72bf048f31ec6fe7e710b2c6c70dff88df4ce4",
+    "records": 3000
+  },
+  "deepseek": {
+    "byte_identical": true,
+    "saved_metrics_sha256": "42a758ec5bc8ffc2ba63574d536067ed2ed29250efc8d27b27b2f1d126149a98",
+    "rescored_sha256": "42a758ec5bc8ffc2ba63574d536067ed2ed29250efc8d27b27b2f1d126149a98",
+    "scorer_sha256": "986e4b9ba19e33119a7399323f72bf048f31ec6fe7e710b2c6c70dff88df4ce4",
+    "records": 3000
+  }
+}

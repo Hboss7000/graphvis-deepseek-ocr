@@ -1,0 +1,80 @@
+{
+  "nodes40/deepseek": {
+    "extractor": "span",
+    "input_sha256": {
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_span_sources_2026-09-11/nodes40/deepseek/predictions_deepseek_edge_number.jsonl": "439142c4dcdc694f858b9b5a80b2a906eedc12d02c59f8d8bb6236dedf1f514d",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_span_sources_2026-09-11/nodes40/deepseek/predictions_deepseek_highest_node_degree.jsonl": "7c442aefed4b4dc62a74566133ac4731b4294cd7288a5c97cbb1cebd1297285e",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_span_sources_2026-09-11/nodes40/deepseek/predictions_deepseek_neighbor_listing.jsonl": "f1bb4f717e4bd4814e64900969d5793d5c421bbbb61d90279d4b11355d2f8495",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_span_sources_2026-09-11/nodes40/deepseek/predictions_deepseek_node_degree.jsonl": "7c4432bf20fc3696c172917f65c4f3a280b8307344e724a9d81e8a5b15d0a864",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_span_sources_2026-09-11/nodes40/deepseek/predictions_deepseek_node_description.jsonl": "e31eae7c0809d8eb945eb6f4e30a783040951143858cef6819aed2d8459ae4a2",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_span_sources_2026-09-11/nodes40/deepseek/predictions_deepseek_node_number.jsonl": "267678fd4ca14caf39cc7f3785bf174bdec180cb3e26b5a702abb2f2e63c6d6a",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_span_sources_2026-09-11/nodes40/deepseek/predictions_deepseek_relation_identification.jsonl": "27a7fe86a37a5b5646ef12ef21add69fa6a28996781ed9d6691f144efcef8589",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_span_sources_2026-09-11/nodes40/deepseek/predictions_deepseek_shortest_path_listing.jsonl": "baf7e59936fba822d3278717e76d53e8c695c5ff185e86722b4f745f2c26f502",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_span_sources_2026-09-11/nodes40/deepseek/predictions_deepseek_triple_listing.jsonl": "b371c0934043058981865e8d7b81fe1e2c5873004e8e5998407d49e3abb850dc",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_span_sources_2026-09-11/nodes40/graph_metadata_0_500.jsonl": "3f08e1277b4a320676052775e66ffbeb4303cf79674860f07003f51da6fe7b0b",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_span_sources_2026-09-11/nodes40/stage1_graph_comprehension_0_500.jsonl": "53660afc78b65c53cd8bedacb9d8d81c19ac53ff6e956402574403f161b7a217"
+    },
+    "legacy_byte_identical_to_saved": true,
+    "legacy_metrics_sha256": "293d43bd3653665aac8ef82c1c1858f2e07019b3ca113a1fa3317f423f48fd7d",
+    "python_version": "3.14.4 (main, Aug 20 2026, 10:41:58) [GCC 15.2.0]",
+    "saved_metrics_sha256": "293d43bd3653665aac8ef82c1c1858f2e07019b3ca113a1fa3317f423f48fd7d",
+    "scorer_sha256": "81d2c37edb8334ec01d99fd26386e0a51a837d061570c59cec31351d1a5cf6dd"
+  },
+  "nodes40/qwen": {
+    "extractor": "span",
+    "input_sha256": {
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_span_sources_2026-09-11/nodes40/graph_metadata_0_500.jsonl": "3f08e1277b4a320676052775e66ffbeb4303cf79674860f07003f51da6fe7b0b",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_span_sources_2026-09-11/nodes40/qwen/predictions_qwen_edge_number.jsonl": "902da0b99b78335063b17a7b063d615656298e75dec8197e7fd065714b3c158e",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_span_sources_2026-09-11/nodes40/qwen/predictions_qwen_highest_node_degree.jsonl": "47c48e24c5b9cfa40f2081d9995e3c8ef89bfe16f4197593dcaa5138cb30c610",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_span_sources_2026-09-11/nodes40/qwen/predictions_qwen_neighbor_listing.jsonl": "28366c00e169475a0d0762fc75f8673f7b2ab3b08556e6b7e7bb31c897cf56ab",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_span_sources_2026-09-11/nodes40/qwen/predictions_qwen_node_degree.jsonl": "0823291154b243f2863b2a8c5374de5d483014c3ec545a442fac39e49cd3a400",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_span_sources_2026-09-11/nodes40/qwen/predictions_qwen_node_description.jsonl": "38a2a412bb14abb567074c90674dda2293ab350dc13faa0a1a5bc031af0852e6",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_span_sources_2026-09-11/nodes40/qwen/predictions_qwen_node_number.jsonl": "dbd36e2bbea12315f915434344e59e2261ea9b91480b43dc90c1275f28d788ec",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_span_sources_2026-09-11/nodes40/qwen/predictions_qwen_relation_identification.jsonl": "9cff2d4bc48c9077c9f341720806b45c165d4146f5fc5607899119c9539553cd",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_span_sources_2026-09-11/nodes40/qwen/predictions_qwen_shortest_path_listing.jsonl": "21c0e60e574cef6fb227d90412dbbfb58af11b9dce815d0e886ab4cbe12bdb5b",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_span_sources_2026-09-11/nodes40/qwen/predictions_qwen_triple_listing.jsonl": "e80c2ae70ea472fc6b9eaae618c98e7fce12c6448046ce4dd1cd2cba3d29b998",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_span_sources_2026-09-11/nodes40/stage1_graph_comprehension_0_500.jsonl": "53660afc78b65c53cd8bedacb9d8d81c19ac53ff6e956402574403f161b7a217"
+    },
+    "legacy_byte_identical_to_saved": true,
+    "legacy_metrics_sha256": "c1413eaacda5e9a2b8de7949be0696cb3b6086d6ea5488088711915d943589db",
+    "python_version": "3.14.4 (main, Aug 20 2026, 10:41:58) [GCC 15.2.0]",
+    "saved_metrics_sha256": "c1413eaacda5e9a2b8de7949be0696cb3b6086d6ea5488088711915d943589db",
+    "scorer_sha256": "81d2c37edb8334ec01d99fd26386e0a51a837d061570c59cec31351d1a5cf6dd"
+  },
+  "paper/deepseek": {
+    "extractor": "span",
+    "input_sha256": {
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_scoring_regression_2026-09-11/deepseek/predictions_deepseek_edge_number.jsonl": "6ffa36d468068c0198c16732fc558bd24b36874d63a8d76146aa08634381343e",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_scoring_regression_2026-09-11/deepseek/predictions_deepseek_highest_node_degree.jsonl": "c2bffe8a0d7b34334f57960b4d065f65402413a847ddbf38e3f72ca02af0a63f",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_scoring_regression_2026-09-11/deepseek/predictions_deepseek_node_degree.jsonl": "0cfd9127070d659d6e25aef046cde05b9ce0b313d00075660d21c202502d202e",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_scoring_regression_2026-09-11/deepseek/predictions_deepseek_node_description.jsonl": "adb7bd4648e3b4ac943f6f567c686a5035ffd3931999d0234a3c73560f113040",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_scoring_regression_2026-09-11/deepseek/predictions_deepseek_node_number.jsonl": "630c65eea37da14e78b91b980e67e590899b559db334519de6faf61af048e5d2",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_scoring_regression_2026-09-11/deepseek/predictions_deepseek_triple_listing.jsonl": "ee0338575b64f7af90be9343990054b2e5ae8ce106674dce43765e72802282af",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_scoring_regression_2026-09-11/graph_metadata_0_500.jsonl": "01049cd8b4bfde4008c43aa1119d7eb5da1898d019db1d9cb83e713f4a7bb4dc",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_scoring_regression_2026-09-11/stage1_graph_comprehension_0_500.jsonl": "e86ee6ff6fcd73dd493f04ce481dbea598a49c0312f4dfefe2c166166b53d1c5"
+    },
+    "legacy_byte_identical_to_saved": true,
+    "legacy_metrics_sha256": "42a758ec5bc8ffc2ba63574d536067ed2ed29250efc8d27b27b2f1d126149a98",
+    "python_version": "3.14.4 (main, Aug 20 2026, 10:41:58) [GCC 15.2.0]",
+    "saved_metrics_sha256": "42a758ec5bc8ffc2ba63574d536067ed2ed29250efc8d27b27b2f1d126149a98",
+    "scorer_sha256": "81d2c37edb8334ec01d99fd26386e0a51a837d061570c59cec31351d1a5cf6dd"
+  },
+  "paper/qwen": {
+    "extractor": "span",
+    "input_sha256": {
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_scoring_regression_2026-09-11/graph_metadata_0_500.jsonl": "01049cd8b4bfde4008c43aa1119d7eb5da1898d019db1d9cb83e713f4a7bb4dc",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_scoring_regression_2026-09-11/qwen/predictions_qwen_edge_number.jsonl": "ee2ff3fcbfd371edea7454d9c5d69bcb21a46c264cdb710c3f9395b83b45410f",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_scoring_regression_2026-09-11/qwen/predictions_qwen_highest_node_degree.jsonl": "6f8ff6abdda06305b46065ee6e4aef62bc0fe3f130fd16eccb4c8cb936c71ca6",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_scoring_regression_2026-09-11/qwen/predictions_qwen_node_degree.jsonl": "4825c2357e290e1ecfb55aea9bf7bcef0c33490c678998d6559b97212360bc24",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_scoring_regression_2026-09-11/qwen/predictions_qwen_node_description.jsonl": "2bc9f04683bcd3e04386a548369012b5729f1823292a75c958fb185e63400a3d",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_scoring_regression_2026-09-11/qwen/predictions_qwen_node_number.jsonl": "9303d1a76b805e07754892e0a1238bfbe35a2117fd19f53963157b1bb01e772d",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_scoring_regression_2026-09-11/qwen/predictions_qwen_triple_listing.jsonl": "4d6fc8ec50eeb79c0adf0ad557f6038daa3ba8d880a9bf3c6f39cf6fc79d55dd",
+      "/home/henrique-leonel/Documents/ba/bachelorArbeit/outputs/stage1_scoring_regression_2026-09-11/stage1_graph_comprehension_0_500.jsonl": "e86ee6ff6fcd73dd493f04ce481dbea598a49c0312f4dfefe2c166166b53d1c5"
+    },
+    "legacy_byte_identical_to_saved": true,
+    "legacy_metrics_sha256": "e121f2691acfe93c9a7adf903fed52e3e27056b217bf4c6d646529294b1e369c",
+    "python_version": "3.14.4 (main, Aug 20 2026, 10:41:58) [GCC 15.2.0]",
+    "saved_metrics_sha256": "e121f2691acfe93c9a7adf903fed52e3e27056b217bf4c6d646529294b1e369c",
+    "scorer_sha256": "81d2c37edb8334ec01d99fd26386e0a51a837d061570c59cec31351d1a5cf6dd"
+  }
+}

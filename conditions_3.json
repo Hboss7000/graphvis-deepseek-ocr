@@ -1,0 +1,5 @@
+{
+  "baseline":     {},
+  "n18_nobridge": {"bridge_rule": "core-neighbor"},
+  "n40_nobridge": {"max_nodes": 40, "max_edges": 0, "bridge_rule": "core-neighbor"}
+}
