@@ -96,6 +96,12 @@ def summarize(rows):
             # Older metadata predates these flags and used their current defaults.
             config.update(bridge_rule=pruning.get('bridge_rule', 'qa-bridge'),
                           lifelines=pruning.get('lifelines', True))
+            if 'core_policy' in pruning or 'max_bridges' in pruning:
+                config.update(
+                    core_policy=pruning.get('core_policy', 'truncate'),
+                    max_bridges=pruning.get('max_bridges', 0),
+                    max_nodes_ignored=pruning.get('max_nodes_ignored', False),
+                )
             configs[json.dumps(config, sort_keys=True)] += 1
 
     def node_summary(items):

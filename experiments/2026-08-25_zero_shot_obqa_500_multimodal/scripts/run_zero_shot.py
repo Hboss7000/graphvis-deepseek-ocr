@@ -17,9 +17,12 @@ import argparse
 import difflib
 import importlib
 import json
+import re
+from functools import wraps
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
+from time import perf_counter
 
 from prompt_common import (
     IMAGE_REFERENCE_SENTENCE,
@@ -73,6 +76,10 @@ def parse_args() -> argparse.Namespace:
         required=True,
     )
     parser.add_argument("--expected-count", type=int, default=500)
+    parser.add_argument(
+        "--max-new-tokens", type=int,
+        help="Optional cap overriding the remote image infer() default of 8192.",
+    )
     parser.add_argument("--resume", action="store_true")
     parser.add_argument(
         "--preview-only",
@@ -216,7 +223,7 @@ def print_prompt_preview(
     print("=" * 80, flush=True)
 
 
-def infer_text_only(model, tokenizer, remote_module, raw_prompt: str, torch) -> str:
+def infer_text_only(model, tokenizer, remote_module, raw_prompt: str, torch, max_new_tokens):
     """Run the text LM with zero compatibility tensors that bypass vision."""
     rendered_prompt = format_plain_prompt(remote_module, raw_prompt)
     token_ids = remote_module.text_encode(
@@ -240,7 +247,7 @@ def infer_text_only(model, tokenizer, remote_module, raw_prompt: str, torch) -> 
                 do_sample=False,
                 temperature=0.0,
                 eos_token_id=tokenizer.eos_token_id,
-                max_new_tokens=MAX_NEW_TOKENS,
+                max_new_tokens=max_new_tokens,
                 no_repeat_ngram_size=NO_REPEAT_NGRAM_SIZE,
                 use_cache=True,
             )
@@ -249,13 +256,15 @@ def infer_text_only(model, tokenizer, remote_module, raw_prompt: str, torch) -> 
     stop_str = "<｜end▁of▁sentence｜>"
     if response.endswith(stop_str):
         response = response[: -len(stop_str)]
-    return response.strip()
+    generated_tokens = int(output_ids.shape[-1] - input_ids.shape[1])
+    return response.strip(), generated_tokens
 
 
-def write_kg_text_run_config(args: argparse.Namespace) -> None:
-    """Write an idempotent provenance record beside KG-text predictions."""
+def write_run_config(args: argparse.Namespace, transformers_version: str,
+                     torch_version: str, effective_max_new_tokens: int) -> None:
+    """Write an idempotent provenance record beside predictions."""
     if args.graph_metadata is None:
-        raise RuntimeError("Cannot write kg_text run_config without graph metadata")
+        raise RuntimeError("Cannot write run_config without graph metadata")
     config_records = read_jsonl(args.input_jsonl)
     config_metadata = index_graph_metadata(args.graph_metadata, config_records)
     config = {
@@ -303,6 +312,19 @@ def write_kg_text_run_config(args: argparse.Namespace) -> None:
             "visible_nodes with connected=false are drawn in the image condition "
             "but omitted from kg_text because they produce no triples"
         ),
+        "transformers_version": transformers_version,
+        "torch_version": torch_version,
+        "generation": {
+            "do_sample": False,
+            "num_beams": 1,
+            "max_new_tokens": effective_max_new_tokens,
+            "no_repeat_ngram_size": NO_REPEAT_NGRAM_SIZE,
+        },
+        "image_processing": {
+            "base_size": BASE_SIZE,
+            "image_size": IMAGE_SIZE,
+            "crop_mode": CROP_MODE,
+        },
     }
     config_path = args.output_jsonl.parent / "run_config.json"
     if config_path.exists():
@@ -319,6 +341,11 @@ def main() -> None:
     args = parse_args()
     if args.condition == "kg_text" and args.graph_metadata is None:
         raise SystemExit("--graph-metadata is required for --condition kg_text")
+    if not args.preview_only and not re.fullmatch(r"[0-9a-fA-F]{40}", args.revision or ""):
+        raise ValueError("--revision must be an explicit 40-character Hub commit")
+    if args.max_new_tokens is not None and args.max_new_tokens <= 0:
+        raise ValueError("--max-new-tokens must be positive")
+    effective_max_new_tokens = args.max_new_tokens or MAX_NEW_TOKENS
 
     records = read_jsonl(args.input_jsonl)
     validate_records(records, args.expected_count)
@@ -360,6 +387,15 @@ def main() -> None:
     model = model.eval().cuda().to(torch.bfloat16)
     model.generation_config.do_sample = False
     model.generation_config.num_beams = 1
+    if args.max_new_tokens is not None:
+        original_generate = model.generate
+
+        @wraps(original_generate)
+        def capped_generate(*generate_args, **generate_kwargs):
+            generate_kwargs["max_new_tokens"] = args.max_new_tokens
+            return original_generate(*generate_args, **generate_kwargs)
+
+        model.generate = capped_generate
 
     remote_module = importlib.import_module(model.__class__.__module__)
     first = records[0]
@@ -404,8 +440,10 @@ def main() -> None:
     done = completed_indices(args.output_jsonl) if args.resume else set()
     args.output_jsonl.parent.mkdir(parents=True, exist_ok=True)
     args.infer_output_dir.mkdir(parents=True, exist_ok=True)
-    if args.condition == "kg_text":
-        write_kg_text_run_config(args)
+    if args.graph_metadata is not None:
+        write_run_config(
+            args, transformers.__version__, torch.__version__, effective_max_new_tokens
+        )
 
     parse_tier_counts = Counter()
     if args.resume and args.output_jsonl.exists():
@@ -432,6 +470,7 @@ def main() -> None:
                 image_path = args.image_root / record["image"]
                 if not image_path.is_file():
                     raise FileNotFoundError(f"Missing graph image: {image_path}")
+                generation_started = perf_counter()
                 response = model.infer(
                     tokenizer,
                     prompt=raw_prompt,
@@ -443,8 +482,16 @@ def main() -> None:
                     image_size=IMAGE_SIZE,
                     crop_mode=CROP_MODE,
                 )
+                generation_elapsed_seconds = perf_counter() - generation_started
+                normalized_response = "" if response is None else str(response).strip()
+                generated_tokens = len(tokenizer.encode(normalized_response, add_special_tokens=False))
             else:
-                response = infer_text_only(model, tokenizer, remote_module, raw_prompt, torch)
+                generation_started = perf_counter()
+                response, generated_tokens = infer_text_only(
+                    model, tokenizer, remote_module, raw_prompt, torch,
+                    effective_max_new_tokens,
+                )
+                generation_elapsed_seconds = perf_counter() - generation_started
 
             response = "" if response is None else str(response).strip()
             parsed, parse_tier = parse_answer(response, n_choices=4)
@@ -458,6 +505,10 @@ def main() -> None:
                 "raw_response": response,
                 "parse_tier": parse_tier,
                 "is_correct": predicted == record["answer"],
+                "generated_token_count": generated_tokens,
+                "hit_token_ceiling": generated_tokens >= effective_max_new_tokens,
+                "vision_tokens_per_item": None,
+                "generation_elapsed_seconds": generation_elapsed_seconds,
                 "model_id": args.model_id,
                 "model_revision": args.revision,
                 "timestamp_utc": datetime.now(timezone.utc).isoformat(),

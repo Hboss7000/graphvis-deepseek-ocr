@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from functools import wraps
 from contextlib import ExitStack
 from datetime import datetime, timezone
 from pathlib import Path
@@ -69,6 +70,10 @@ def parse_args() -> argparse.Namespace:
         help="Permit a partial task set and skip aggregate scoring (ablation controls only)",
     )
     parser.add_argument("--seed", type=int, default=13)
+    parser.add_argument(
+        "--max-new-tokens", type=int,
+        help="Optional cap overriding the remote infer() default of 8192.",
+    )
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--preview-only", action="store_true")
     parser.add_argument(
@@ -83,6 +88,9 @@ def main() -> None:
     args = parse_args()
     if args.behavior_only and args.prompt_variant != "describe":
         raise SystemExit("--behavior-only is restricted to the describe ablation control")
+    if args.max_new_tokens is not None and args.max_new_tokens <= 0:
+        raise ValueError("--max-new-tokens must be positive")
+    effective_max_new_tokens = args.max_new_tokens or MAX_NEW_TOKENS
     task_types = TASK_SETS[args.task_set]
     records, metadata_by_idx, task_counts = validate_stage1(
         args.input_jsonl, args.graph_metadata, args.expected_count, task_types,
@@ -152,6 +160,15 @@ def main() -> None:
     model = model.eval().cuda().to(torch.bfloat16)
     model.generation_config.do_sample = False
     model.generation_config.num_beams = 1
+    if args.max_new_tokens is not None:
+        original_generate = model.generate
+
+        @wraps(original_generate)
+        def capped_generate(*generate_args, **generate_kwargs):
+            generate_kwargs["max_new_tokens"] = args.max_new_tokens
+            return original_generate(*generate_args, **generate_kwargs)
+
+        model.generate = capped_generate
 
     answer_provenance = answer_format_provenance(args.answer_format, task_types)
     if args.prompt_variant == "old-placeholder":
@@ -189,11 +206,11 @@ def main() -> None:
         "generation": {
             "do_sample": False,
             "num_beams": 1,
-            "max_new_tokens": MAX_NEW_TOKENS,
+            "max_new_tokens": effective_max_new_tokens,
             "no_repeat_ngram_size": NO_REPEAT_NGRAM_SIZE,
             "eval_mode": True,
         },
-        "effective_max_new_tokens": MAX_NEW_TOKENS,
+        "effective_max_new_tokens": effective_max_new_tokens,
         "image_processing": {
             "base_size": BASE_SIZE,
             "image_size": IMAGE_SIZE,
@@ -203,7 +220,7 @@ def main() -> None:
         "attention_implementation": "eager",
         "token_ceiling_detection": (
             "Approximate: response is re-encoded without special tokens; a count "
-            ">= 8192 is marked as hitting the remote-code generation ceiling."
+            f">= {effective_max_new_tokens} is marked as hitting the generation ceiling."
         ),
         "source_image_generation": {
             "command_verified_in_shell_history": (
@@ -267,7 +284,7 @@ def main() -> None:
             infer_returned_empty_string = isinstance(infer_response, str) and infer_response == ""
             response = "" if infer_returned_none else str(infer_response).strip()
             generated_tokens = len(tokenizer.encode(response, add_special_tokens=False))
-            hit_ceiling = generated_tokens >= MAX_NEW_TOKENS
+            hit_ceiling = generated_tokens >= effective_max_new_tokens
             format_diagnostics = answer_format_diagnostics(
                 task, response, args.answer_format
             )
@@ -289,7 +306,9 @@ def main() -> None:
                 "normalized_response_empty": response == "",
                 "generation_elapsed_seconds": generation_elapsed_seconds,
                 "generated_token_count_approx": generated_tokens,
+                "generated_token_count": generated_tokens,
                 "hit_token_ceiling": hit_ceiling,
+                "vision_tokens_per_item": None,
                 **format_diagnostics,
                 **score_record(record, response, metadata_by_idx[idx]),
                 "model_id": args.model_id,

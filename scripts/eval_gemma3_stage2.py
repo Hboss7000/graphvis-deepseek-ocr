@@ -244,7 +244,7 @@ def main() -> None:
                     raise FileNotFoundError(f"Missing graph image: {image_path}")
                 with Image.open(image_path) as opened_image:
                     image = opened_image.convert("RGB")
-            response, _generated_tokens, _hit_ceiling, image_views, image_soft_tokens = gemma.infer_one(
+            response, generated_tokens, hit_ceiling, image_views, image_soft_tokens = gemma.infer_one(
                 model, processor, body, args.condition, image, args, torch, processor_details)
             parsed, parse_tier = parse_answer(response, n_choices=4)
             parse_tier_counts[parse_tier] += 1
@@ -257,6 +257,9 @@ def main() -> None:
                 "raw_response": response,
                 "parse_tier": parse_tier,
                 "is_correct": predicted == record["answer"],
+                "generated_token_count": generated_tokens,
+                "hit_token_ceiling": hit_ceiling,
+                "vision_tokens_per_item": image_soft_tokens,
                 "model_id": args.model_id,
                 "model_revision": args.revision,
                 "timestamp_utc": datetime.now(timezone.utc).isoformat(),

@@ -19,6 +19,12 @@ import graphviz
 from PIL import Image
 
 from pruning_stats import distribution, load_split
+from llava_common import select_best_resolution
+
+
+LLAVA_NEXT_GRID_PINPOINTS = (
+    (336, 672), (672, 336), (672, 672), (1008, 336), (336, 1008),
+)
 
 
 @lru_cache(maxsize=None)
@@ -47,8 +53,15 @@ def audit_split(split, image_root=None, node_fontsize=18, dpi=200, min_label_px=
         with Image.open(image_path) as image:
             width, height = image.size
         cap = reference * graph_scale * 896 / max(width, height)
+        llava_height, llava_width = select_best_resolution(
+            (height, width), LLAVA_NEXT_GRID_PINPOINTS
+        )
+        llava_scale = min(llava_width / width, llava_height / height)
+        llava_cap = reference * graph_scale * llava_scale
         rows.append({'statement_idx': idx, 'image': str(image_path), 'width': width, 'height': height,
                      'aspect_ratio': width / height, 'estimated_label_cap_px_896': cap,
+                     'llava_selected_grid': {'height': llava_height, 'width': llava_width},
+                     'estimated_label_cap_px_llava_anyres': llava_cap,
                      'node_count': len(meta['visible_nodes']), 'edge_count': len(meta['edges'])})
     return {'method': __doc__, 'node_fontsize': node_fontsize, 'dpi': dpi,
             'reference_cap_height_px': reference, 'graph_scale': graph_scale,
@@ -56,6 +69,10 @@ def audit_split(split, image_root=None, node_fontsize=18, dpi=200, min_label_px=
             'summary': {'image_count': len(rows),
                         'scaled_label_height': distribution(r['estimated_label_cap_px_896'] for r in rows),
                         'below_threshold': sum(r['estimated_label_cap_px_896'] < min_label_px for r in rows),
+                        'llava_anyres_label_height': distribution(
+                            r['estimated_label_cap_px_llava_anyres'] for r in rows),
+                        'llava_anyres_below_threshold': sum(
+                            r['estimated_label_cap_px_llava_anyres'] < min_label_px for r in rows),
                         'aspect_ratio': distribution(r['aspect_ratio'] for r in rows)}}
 
 

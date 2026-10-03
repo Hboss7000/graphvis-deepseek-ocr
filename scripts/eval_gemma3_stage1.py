@@ -107,6 +107,7 @@ def make_result(record, response, generated_tokens, hit_ceiling, image_views,
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "image_views": image_views,
         "image_soft_tokens": image_soft_tokens,
+        "vision_tokens_per_item": image_soft_tokens,
     }
     if isinstance(record.get('gold'), dict):
         result['structured_gold'] = record['gold']

@@ -299,7 +299,8 @@ def test_stage2_50_item_scorer_and_repeat(dataset, fake_runtime, monkeypatch):
             check=True, capture_output=True)
         row = read_jsonl(out)[0]
         assert list(row) == ['statement_idx', 'image', 'gold_option', 'predicted_option', 'raw_response',
-            'parse_tier', 'is_correct', 'model_id', 'model_revision', 'timestamp_utc',
+            'parse_tier', 'is_correct', 'generated_token_count', 'hit_token_ceiling',
+            'vision_tokens_per_item', 'model_id', 'model_revision', 'timestamp_utc',
             'image_views', 'image_soft_tokens']
         assert row['image_views'] == 0
         assert row['image_soft_tokens'] == 0

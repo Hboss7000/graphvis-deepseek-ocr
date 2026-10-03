@@ -144,6 +144,8 @@ def test_audit_measured_height(tmp_path):
     reference = image_audit.reference_cap_height()
     assert reference > 0
     assert result['images'][0]['estimated_label_cap_px_896'] == reference / 2
+    assert result['images'][0]['llava_selected_grid'] == {'height': 336, 'width': 672}
+    assert result['images'][0]['estimated_label_cap_px_llava_anyres'] == reference * 0.375
     assert result['images'][0]['aspect_ratio'] == 2
     assert image_audit.reference_cap_height(30) > reference
 
@@ -153,6 +155,7 @@ def test_cli_defaults(monkeypatch):
     args = gen.parse_args()
     assert (args.max_nodes, args.max_edges, args.max_degree) == (18, 60, 0)
     assert args.bridge_rule == 'qa-bridge' and args.lifelines is True
+    assert args.core_policy == 'truncate' and args.max_bridges == 0
     assert (args.node_fontsize, args.edge_fontsize, args.nodesep, args.ranksep, args.rankdir) == (18, 14, 0.5, 0.7, 'LR')
     assert args.graph_size is None and args.graph_ratio is None
 
@@ -240,6 +243,42 @@ def test_core_retention_metadata(budget, truncated, size):
     assert graph['pruning']['core_truncated'] is truncated
     assert graph['pruning']['bridges_added'] == 0
     assert graph['pruning']['max_nodes'] == budget
+
+
+def test_keep_core_policy_never_drops_core_and_records_ignored_node_cap():
+    nodes = {i: {'name': str(i), 'in_question': i < 20,
+                 'in_choices': {'A'} if i >= 20 else set()} for i in range(27)}
+    keep, graph = capture_keep(
+        nodes, set(), 3, 0, 0, core_policy='keep', max_bridges=10
+    )
+    assert keep == set(nodes)
+    assert graph['pruning']['core_size'] == 27
+    assert graph['pruning']['core_truncated'] is False
+    assert graph['pruning']['core_policy'] == 'keep'
+    assert graph['pruning']['max_nodes'] == 3
+    assert graph['pruning']['max_nodes_ignored'] is True
+
+
+def test_keep_core_policy_limits_bridges_after_existing_ranking():
+    nodes, edges = hub_graph()
+    keep, graph = capture_keep(
+        nodes, edges, 2, 0, 0, core_policy='keep', max_bridges=4
+    )
+    assert {0, 10} <= keep
+    assert len(keep - {0, 10}) == 4
+    assert graph['pruning']['bridges_added'] == 4
+    assert graph['pruning']['max_bridges'] == 4
+
+
+def test_explicit_default_core_policy_is_byte_identical():
+    nodes, edges = hub_graph()
+    implicit = gen.prune_graph(nodes, edges, 18, 60, 0)
+    explicit = gen.prune_graph(
+        nodes, edges, 18, 60, 0, core_policy='truncate', max_bridges=0
+    )
+    assert json.dumps(implicit, sort_keys=True).encode() == json.dumps(
+        explicit, sort_keys=True
+    ).encode()
 
 
 def test_unlimited_edges_skips_truncation(capsys):

@@ -8,6 +8,7 @@ GraphVis does not specify this aggregation step directly.
 """
 
 import argparse
+import hashlib
 import json
 import math
 import pickle
@@ -299,10 +300,15 @@ def merge_choice_graphs(statement_idx, graph_entries, statement, id2concept, n_c
 
 
 def prune_graph(merged_nodes, merged_edges, max_nodes, max_edges, max_degree, *,
-                bridge_rule='qa-bridge', lifelines=True):
+                bridge_rule='qa-bridge', lifelines=True, core_policy='truncate',
+                max_bridges=0):
     if bridge_rule not in ('qa-bridge', 'core-neighbor', 'any', 'none'):
         raise ValueError(f'Unknown bridge rule: {bridge_rule}')
-    node_budget = max_nodes or None
+    if core_policy not in ('truncate', 'keep'):
+        raise ValueError(f'Unknown core policy: {core_policy}')
+    if max_bridges < 0:
+        raise ValueError('Require max_bridges >= 0')
+    node_budget = (max_nodes or None) if core_policy == 'truncate' else None
     edge_budget = max_edges or None
     neighbors = defaultdict(set)
     for src, _rel, tgt in merged_edges:
@@ -313,7 +319,7 @@ def prune_graph(merged_nodes, merged_edges, max_nodes, max_edges, max_degree, *,
     a_cids = {cid for cid, node in merged_nodes.items() if node['in_choices']}
 
     core = set(q_cids) | set(a_cids)
-    core_truncated = node_budget is not None and len(core) > node_budget
+    core_truncated = core_policy == 'truncate' and node_budget is not None and len(core) > node_budget
     if core_truncated:
         # Question and answer nodes alone exceed the budget: keep all question
         # nodes first, then fill with the best-connected answer nodes.
@@ -348,6 +354,8 @@ def prune_graph(merged_nodes, merged_edges, max_nodes, max_edges, max_degree, *,
         bridges.sort(key=lambda cid: (-len(neighbors[cid] & core), cid))
     if node_budget is not None:
         bridges = bridges[:max(0, node_budget - len(keep))]
+    if max_bridges > 0:
+        bridges = bridges[:max_bridges]
     keep.update(bridges)
 
     # Stable input order also resolves equal-priority relation/direction ties.
@@ -423,6 +431,15 @@ def prune_graph(merged_nodes, merged_edges, max_nodes, max_edges, max_degree, *,
     connected_keep = {cid for cid in keep if cid in connected}
     visible_nodes = sorted(connected_keep | set(disconnected_answers))
 
+    pruning = {'max_nodes': max_nodes, 'max_edges': max_edges, 'max_degree': max_degree,
+               'bridge_rule': bridge_rule, 'lifelines': lifelines,
+               'core_size': len(core), 'core_truncated': core_truncated,
+               'bridges_added': len(bridges),
+               'edges_before_truncation': edges_before_truncation, 'edges_after': len(edges)}
+    if core_policy != 'truncate' or max_bridges != 0:
+        pruning.update(core_policy=core_policy, max_bridges=max_bridges,
+                       max_nodes_ignored=core_policy == 'keep')
+
     return {
         'connected_nodes': sorted(connected_keep),
         'visible_nodes': visible_nodes,
@@ -431,11 +448,7 @@ def prune_graph(merged_nodes, merged_edges, max_nodes, max_edges, max_degree, *,
         'disconnected_questions': disconnected_questions,
         'q_cids': sorted(q_cids),
         'a_cids': sorted(a_cids),
-        'pruning': {'max_nodes': max_nodes, 'max_edges': max_edges, 'max_degree': max_degree,
-                    'bridge_rule': bridge_rule, 'lifelines': lifelines,
-                    'core_size': len(core), 'core_truncated': core_truncated,
-                    'bridges_added': len(bridges),
-                    'edges_before_truncation': edges_before_truncation, 'edges_after': len(edges)},
+        'pruning': pruning,
     }
 
 
@@ -687,6 +700,39 @@ def write_jsonl(path, records):
             f.write(json.dumps(record, ensure_ascii=False) + '\n')
 
 
+def load_indices_file(path, split, source_n, statement_path):
+    payload = json.loads(path.read_text(encoding='utf-8'))
+    required = {'split', 'n', 'source_n', 'indices', 'sha256_of_statement_file'}
+    missing = required - payload.keys()
+    if missing:
+        raise ValueError(f'Indices file lacks fields: {sorted(missing)}')
+    if payload['split'] != split:
+        raise ValueError(
+            f"Indices split {payload['split']!r} does not match --split {split!r}"
+        )
+    if int(payload['source_n']) != source_n:
+        raise ValueError(
+            f"Indices source_n={payload['source_n']} does not match {source_n} statements"
+        )
+    digest = hashlib.sha256(statement_path.read_bytes()).hexdigest()
+    if payload['sha256_of_statement_file'] != digest:
+        raise ValueError('Indices file statement SHA-256 does not match the selected source')
+    indices = [int(value) for value in payload['indices']]
+    if len(indices) != int(payload['n']):
+        raise ValueError('Indices file n does not match the number of indices')
+    if len(indices) != len(set(indices)):
+        raise ValueError('Indices file contains duplicate indices')
+    if any(index < 0 or index >= source_n for index in indices):
+        raise ValueError(f'Indices must be in [0, {source_n})')
+    return sorted(indices)
+
+
+def indices_suffix(path, split):
+    stem = path.stem
+    prefix = f'obqa_{split}_'
+    return stem[len(prefix):] if stem.startswith(prefix) else stem
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--split', default='train', choices=['train', 'dev', 'test'])
@@ -694,6 +740,10 @@ def parse_args():
     parser.add_argument('--out-dir', type=Path, default=Path('outputs/graphvis_obqa'))
     parser.add_argument('--start', type=int, default=0)
     parser.add_argument('--limit', type=int, default=10)
+    parser.add_argument(
+        '--indices-file', type=Path,
+        help='JSON subset manifest; when set, --start/--limit are ignored.',
+    )
     parser.add_argument('--tasks-per-graph', type=int, default=None)
     parser.add_argument('--stage1-task-set', choices=['paper', 'extended'], default='paper')
     parser.add_argument('--stage1-balance', choices=['pool', 'per-task'], default='pool',
@@ -702,6 +752,10 @@ def parse_args():
     parser.add_argument('--max-nodes', type=int, default=18, help='Node cap; 0 disables it.')
     parser.add_argument('--max-edges', type=int, default=60, help='Edge cap; 0 disables it.')
     parser.add_argument('--max-degree', type=int, default=0, help='Degree cap; 0 disables it.')
+    parser.add_argument('--core-policy', choices=['truncate', 'keep'], default='truncate',
+                        help='Whether max-nodes may truncate question/answer core concepts.')
+    parser.add_argument('--max-bridges', type=int, default=0,
+                        help='Independent bridge-node cap; 0 disables it.')
     parser.add_argument('--bridge-rule', choices=['qa-bridge', 'core-neighbor', 'any', 'none'],
                         default='qa-bridge', help='Eligibility rule for filler nodes.')
     parser.add_argument('--no-lifelines', dest='lifelines', action='store_false',
@@ -737,8 +791,11 @@ def parse_args():
 
 def main():
     args = parse_args()
-    if args.max_degree < 0 or args.max_nodes < 0 or args.max_edges < 0:
-        raise ValueError('Require max_degree >= 0, max_nodes >= 0 and max_edges >= 0')
+    if (args.max_degree < 0 or args.max_nodes < 0 or args.max_edges < 0
+            or args.max_bridges < 0):
+        raise ValueError(
+            'Require max_degree >= 0, max_nodes >= 0, max_edges >= 0 and max_bridges >= 0'
+        )
     rng = random.Random(args.seed)
 
     cpnet_dir = args.data_root / 'cpnet'
@@ -753,14 +810,20 @@ def main():
         graph_entries = pickle.load(f)
     statements = load_jsonl(statement_path)
 
-    end = min(len(statements), args.start + args.limit)
-    selected = range(args.start, end)
+    if args.indices_file is None:
+        end = min(len(statements), args.start + args.limit)
+        selected = list(range(args.start, end))
+        suffix = f'{args.start}_{end}'
+    else:
+        selected = load_indices_file(
+            args.indices_file, args.split, len(statements), statement_path
+        )
+        suffix = indices_suffix(args.indices_file, args.split)
 
     split_out = args.out_dir / args.split
     image_dir = split_out / 'images'
     graph_dir = split_out / 'graphs'
     # Never replace an existing split or any of its selected image/metadata files.
-    suffix = f'{args.start}_{end}'
     planned = [split_out / f'{prefix}_{suffix}.jsonl' for prefix in
                ('stage1_graph_comprehension', 'stage2_obqa', 'graph_metadata')]
     planned += [image_dir / f'q{idx:05d}_clean.png' for idx in selected]
@@ -781,7 +844,8 @@ def main():
             statement_idx, graph_entries, statement, id2concept
         )
         graph = prune_graph(merged_nodes, merged_edges, args.max_nodes, args.max_edges, args.max_degree,
-                            bridge_rule=args.bridge_rule, lifelines=args.lifelines)
+                            bridge_rule=args.bridge_rule, lifelines=args.lifelines,
+                            core_policy=args.core_policy, max_bridges=args.max_bridges)
         image_stem = image_dir / f'q{statement_idx:05d}_clean'
         image_path = render_graph(
             image_stem, merged_nodes, graph, correct_label, args.engine, args.hide_relatedto_labels,
@@ -802,7 +866,6 @@ def main():
         metadata_records.append(metadata)
         write_jsonl(graph_dir / f'q{statement_idx:05d}.jsonl', [metadata])
 
-    suffix = f'{args.start}_{end}'
     write_jsonl(split_out / f'stage1_graph_comprehension_{suffix}.jsonl', stage1_records)
     write_jsonl(split_out / f'stage2_obqa_{suffix}.jsonl', stage2_records)
     write_jsonl(split_out / f'graph_metadata_{suffix}.jsonl', metadata_records)

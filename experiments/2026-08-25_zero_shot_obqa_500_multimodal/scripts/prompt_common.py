@@ -140,11 +140,14 @@ def assert_no_answer_letter_annotation(prompt: str) -> None:
 def completed_indices(path: Path) -> set[int]:
     if not path.exists():
         return set()
-    return {
+    indices = [
         int(row["statement_idx"])
         for row in read_jsonl(path)
         if "statement_idx" in row
-    }
+    ]
+    if len(indices) != len(set(indices)):
+        raise ValueError(f"Duplicate existing prediction statement_idx in {path}")
+    return set(indices)
 
 
 def parse_answer(pred_text: str, n_choices: int) -> tuple[str, str]:

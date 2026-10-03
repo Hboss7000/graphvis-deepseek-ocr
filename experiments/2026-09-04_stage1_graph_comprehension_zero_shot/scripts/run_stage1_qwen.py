@@ -9,6 +9,7 @@ import sys
 from contextlib import ExitStack
 from datetime import datetime, timezone
 from pathlib import Path
+from time import perf_counter
 
 from score_stage1 import (
     TASK_TYPES,
@@ -76,6 +77,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--preview-only", action="store_true")
     parser.add_argument(
+        "--behavior-only", action="store_true",
+        help="Permit a partial task set and skip aggregate scoring (pilot probes only).",
+    )
+    parser.add_argument(
         "--approve-prompts",
         action="store_true",
         help="Confirm the printed prompts were reviewed and permit inference",
@@ -86,9 +91,14 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def infer_one(model, processor, prompt_text: str, image, args, torch) -> tuple[str, int, bool]:
+def infer_one(model, processor, prompt_text: str, image, args, torch):
     inputs = prepare_inputs(processor, prompt_text, image, args).to("cuda")
+    vision_tokens = int(
+        (inputs["input_ids"] == int(processor.image_token_id)).sum().item()
+    )
     input_length = int(inputs["input_ids"].shape[1])
+    torch.cuda.reset_peak_memory_stats()
+    started = perf_counter()
     with torch.inference_mode():
         output_ids = model.generate(
             **inputs,
@@ -96,6 +106,8 @@ def infer_one(model, processor, prompt_text: str, image, args, torch) -> tuple[s
             num_beams=1,
             max_new_tokens=args.max_new_tokens,
         )
+    elapsed = perf_counter() - started
+    peak = int(torch.cuda.max_memory_allocated())
     generated = output_ids[:, input_length:]
     generated_tokens = int(generated.shape[1])
     response = processor.batch_decode(
@@ -105,7 +117,8 @@ def infer_one(model, processor, prompt_text: str, image, args, torch) -> tuple[s
     )[0].strip()
     if response.endswith("<|im_end|>"):
         response = response[: -len("<|im_end|>")].rstrip()
-    return response, generated_tokens, generated_tokens >= args.max_new_tokens
+    return (response, generated_tokens, generated_tokens >= args.max_new_tokens,
+            vision_tokens, elapsed, peak)
 
 
 def main() -> None:
@@ -137,10 +150,14 @@ def main() -> None:
             f"found {transformers.__version__}"
         )
     processor, processor_budget_api = load_processor(AutoProcessor, args)
+    preview_tasks = (
+        tuple(dict.fromkeys(record["task_type"] for record in records))
+        if args.behavior_only else task_types
+    )
     formatted_previews = print_six_prompt_previews(
         records,
         formatter=lambda body: format_qwen_prompt(processor, body, "image"),
-        task_types=task_types,
+        task_types=preview_tasks,
         answer_format=args.answer_format,
     )
     system_prompt_injected = any(
@@ -192,9 +209,11 @@ def main() -> None:
     if unknown_done:
         raise ValueError(f"Existing predictions are not in the current input: {sorted(unknown_done)[:10]}")
 
+    load_started = perf_counter()
     model, dtype_argument, resolved_dtype = load_model(
         Qwen3VLForConditionalGeneration, torch, args
     )
+    loading_seconds = perf_counter() - load_started
     run_config = {
         "model_name": MODEL_NAME,
         "model_id": args.model_id,
@@ -267,6 +286,12 @@ def main() -> None:
     if args.task_set != "paper":
         run_config["task_set"] = args.task_set
     write_run_config(args.output_dir, run_config)
+    runtime_path = args.output_dir / "runtime_metrics.json"
+    if not runtime_path.exists():
+        runtime_path.write_text(
+            json.dumps({"loading_elapsed_seconds": loading_seconds}, indent=2) + "\n",
+            encoding="utf-8",
+        )
 
     generated_count = 0
     with ExitStack() as stack:
@@ -289,9 +314,11 @@ def main() -> None:
             )
             with Image.open(image_path) as opened:
                 image = opened.convert("RGB")
-                response, generated_tokens, hit_ceiling = infer_one(
-                    model, processor, prompt_text, image, args, torch
-                )
+                inference = infer_one(model, processor, prompt_text, image, args, torch)
+                response, generated_tokens, hit_ceiling = inference[:3]
+                vision_tokens = inference[3] if len(inference) > 3 else None
+                generation_elapsed_seconds = inference[4] if len(inference) > 4 else None
+                peak_memory_allocated_bytes = inference[5] if len(inference) > 5 else None
             format_diagnostics = answer_format_diagnostics(
                 task, response, args.answer_format
             )
@@ -310,6 +337,9 @@ def main() -> None:
                 "raw_response": response,
                 "generated_token_count": generated_tokens,
                 "hit_token_ceiling": hit_ceiling,
+                "vision_tokens_per_item": vision_tokens,
+                "generation_elapsed_seconds": generation_elapsed_seconds,
+                "peak_memory_allocated_bytes": peak_memory_allocated_bytes,
                 **format_diagnostics,
                 **score_record(record, response, metadata_by_idx[idx]),
                 "model_id": args.model_id,
@@ -331,9 +361,12 @@ def main() -> None:
     if len(done) != len(records):
         raise RuntimeError(f"Run ended with {len(done)}/{len(records)} completed predictions")
     print(f"Generated {generated_count} new predictions; {len(done)} total complete.", flush=True)
-    score_completed_run(
-        args.input_jsonl, args.graph_metadata, args.output_dir, MODEL_NAME, args.task_set
-    )
+    if args.behavior_only:
+        print("Behavior-only probe complete; aggregate scoring intentionally skipped.", flush=True)
+    else:
+        score_completed_run(
+            args.input_jsonl, args.graph_metadata, args.output_dir, MODEL_NAME, args.task_set
+        )
 
 
 if __name__ == "__main__":

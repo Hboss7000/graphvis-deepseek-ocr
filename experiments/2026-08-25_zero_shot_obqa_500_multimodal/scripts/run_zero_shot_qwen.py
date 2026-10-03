@@ -310,8 +310,11 @@ def load_model(Qwen3VLForConditionalGeneration, torch, args: argparse.Namespace)
     return model, dtype_argument, resolved_dtype
 
 
-def infer_one(model, processor, prompt_text: str, image, args, torch) -> str:
+def infer_one(model, processor, prompt_text: str, image, args, torch):
     inputs = prepare_inputs(processor, prompt_text, image, args).to("cuda")
+    vision_tokens = int(
+        (inputs["input_ids"] == int(processor.image_token_id)).sum().item()
+    )
     input_length = int(inputs["input_ids"].shape[1])
     with torch.inference_mode():
         output_ids = model.generate(
@@ -321,6 +324,7 @@ def infer_one(model, processor, prompt_text: str, image, args, torch) -> str:
             max_new_tokens=args.max_new_tokens,
         )
     generated = output_ids[:, input_length:]
+    generated_tokens = int(generated.shape[1])
     response = processor.batch_decode(
         generated,
         skip_special_tokens=False,
@@ -328,7 +332,10 @@ def infer_one(model, processor, prompt_text: str, image, args, torch) -> str:
     )[0].strip()
     if response.endswith("<|im_end|>"):
         response = response[: -len("<|im_end|>")]
-    return response.strip()
+    return (
+        response.strip(), generated_tokens,
+        generated_tokens >= args.max_new_tokens, vision_tokens,
+    )
 
 
 def write_run_config(
@@ -528,7 +535,9 @@ def main() -> None:
                     raise FileNotFoundError(f"Missing graph image: {image_path}")
                 with Image.open(image_path) as opened_image:
                     image = opened_image.convert("RGB")
-            response = infer_one(model, processor, prompt_text, image, args, torch)
+            response, generated_tokens, hit_ceiling, vision_tokens = infer_one(
+                model, processor, prompt_text, image, args, torch
+            )
             parsed, parse_tier = parse_answer(response, n_choices=4)
             parse_tier_counts[parse_tier] += 1
             predicted = None if parsed == "FAILED" else parsed
@@ -540,6 +549,9 @@ def main() -> None:
                 "raw_response": response,
                 "parse_tier": parse_tier,
                 "is_correct": predicted == record["answer"],
+                "generated_token_count": generated_tokens,
+                "hit_token_ceiling": hit_ceiling,
+                "vision_tokens_per_item": vision_tokens,
                 "model_id": args.model_id,
                 "model_revision": args.revision,
                 "timestamp_utc": datetime.now(timezone.utc).isoformat(),
