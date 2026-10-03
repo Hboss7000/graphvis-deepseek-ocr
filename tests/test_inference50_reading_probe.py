@@ -44,7 +44,8 @@ def test_probe_report_uses_raw_macro_node_recall_and_paired_indices(tmp_path):
     }
     arms = {}
     for label, response in (("perfect", record["answer"]), ("half", "alpha"),
-                            ("repeat", record["answer"]), ("intrusion", "alpha, part of")):
+                            ("repeat", record["answer"]),
+                            ("intrusion", "alpha, part of, part of")):
         rows = []
         for index in (3, 7):
             row = {"statement_idx": index, "task_type": "node_description",
@@ -71,6 +72,34 @@ def test_probe_report_uses_raw_macro_node_recall_and_paired_indices(tmp_path):
     assert report["arms"]["half"]["raw_macro_gold_node_recall"] == 0.5
     assert report["arms"]["perfect"]["raw_macro_precision"] == 1.0
     assert report["arms"]["perfect"]["raw_macro_f1"] == 1.0
-    assert report["arms"]["perfect"]["edge_label_intrusion"]["rate"] == 0.0
-    assert report["arms"]["intrusion"]["edge_label_intrusion"]["rate"] == 0.5
+    assert report["arms"]["perfect"]["edge_label_intrusion"]["raw_predicted_items"]["rate"] == 0.0
+    intrusion = report["arms"]["intrusion"]["edge_label_intrusion"]
+    assert intrusion["raw_predicted_items"]["rate"] == 2 / 3
+    assert intrusion["distinct_predicted_items_per_graph"]["rate"] == 0.5
     assert report["statement_indices"] == [3, 7]
+
+
+def test_probe_intrusion_uses_each_graphs_relations_not_union(tmp_path):
+    predictions = tmp_path / "predictions.jsonl"
+    record = {"task_type": "node_description",
+              "answer": "The image depicts the following nodes: alpha, beta."}
+    rows = []
+    for index in (3, 7):
+        row = {"statement_idx": index, "task_type": "node_description", "raw_response": "part of"}
+        row.update(score_record(record, row["raw_response"], {}))
+        rows.append(row)
+    dump(predictions, rows)
+    metadata = tmp_path / "metadata.jsonl"
+    dump(metadata, [
+        {"statement_idx": 3, "edges": [{"relation": "partof"}]},
+        {"statement_idx": 7, "edges": [{"relation": "causes"}]},
+    ])
+    output = tmp_path / "report.json"
+    subprocess.run([
+        sys.executable, str(ROOT / "scripts/report_inference50_reading_probe.py"),
+        "--arm", f"test={predictions}", "--graph-metadata", str(metadata),
+        "--expected-count", "2", "--output", str(output),
+    ], check=True, capture_output=True)
+    intrusion = json.loads(output.read_text())["arms"]["test"]["edge_label_intrusion"]
+    assert intrusion["raw_predicted_items"]["matching_predicted_item_count"] == 1
+    assert intrusion["distinct_predicted_items_per_graph"]["matching_predicted_item_count"] == 1

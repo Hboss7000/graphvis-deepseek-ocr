@@ -18,24 +18,32 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def comparison_rows(legacy: dict, span: dict) -> list[dict]:
+def comparison_rows(legacy: dict, span: dict, span_extended: dict) -> list[dict]:
     rows = []
     for task, old in legacy['tasks'].items():
         new = span['tasks'][task]
+        extended = span_extended['tasks'][task]
         if task in scorer.NUMERIC_TASKS:
             label, before, after = 'accuracy', old['exact_accuracy'], new['strict_accuracy']
+            extended_value = extended['strict_accuracy']
         elif task == 'highest_node_degree':
             label, before, after = 'degree accuracy', old['degree_accuracy'], new['strict_accuracy']
+            extended_value = extended['strict_accuracy']
         elif task == 'relation_identification':
             label, before, after = 'accuracy', old['raw']['accuracy'], new['strict_accuracy']
+            extended_value = extended['strict_accuracy']
         elif task == 'shortest_path_listing':
             label, before, after = 'path exact', old['raw']['path_exact'], new['raw']['path_exact']
+            extended_value = extended['raw']['path_exact']
         elif task == 'neighbor_listing':
             label, before, after = 'macro F1', old['raw']['mean_f1'], new['raw']['mean_f1']
+            extended_value = extended['raw']['mean_f1']
         else:
             label, before, after = 'macro F1', old['set_metrics']['raw']['macro_f1'], new['set_metrics']['raw']['macro_f1']
+            extended_value = extended['set_metrics']['raw']['macro_f1']
         rows.append({'task': task, 'record_count': new['record_count'], 'metric': label,
-                     'legacy': before, 'span': after, 'lenient_containment': new['lenient_containment']})
+                     'legacy': before, 'span': after, 'span_extended': extended_value,
+                     'lenient_containment': new['lenient_containment']})
     return rows
 
 
@@ -43,13 +51,14 @@ def comparison_markdown(model: str, rows: list[dict]) -> str:
     lines = [f'# Answer extraction comparison: {model}', '',
              'Raw normalization; all records included. Containment is a diagnostic upper bound, **not accuracy**. '
              'For sets it measures gold-member recall, so its difference from F1 is not a pure extraction loss.', '',
-             '| Task | N | Strict metric | Legacy | Span | Lenient containment |',
-             '| --- | ---: | --- | ---: | ---: | ---: |']
+             '| Task | N | Strict metric | Legacy | Span | Span extended | Lenient containment |',
+             '| --- | ---: | --- | ---: | ---: | ---: | ---: |']
     def fmt(value):
         return 'n/a' if value is None else f'{value:.4f}'
     for row in rows:
         lines.append(f"| {row['task']} | {row['record_count']} | {row['metric']} | "
-                     f"{fmt(row['legacy'])} | {fmt(row['span'])} | {fmt(row['lenient_containment'])} |")
+                     f"{fmt(row['legacy'])} | {fmt(row['span'])} | {fmt(row['span_extended'])} | "
+                     f"{fmt(row['lenient_containment'])} |")
     return '\n'.join(lines) + '\n'
 
 
@@ -62,7 +71,7 @@ def rescore(args: argparse.Namespace) -> dict:
     before = {str(path.resolve()): sha256(path) for path in inputs}
     results = {}
     scored_rows = None
-    for extractor in ('legacy', 'span'):
+    for extractor in ('legacy', 'span', 'span_extended'):
         options = SimpleNamespace(**{**vars(args), 'extractor': extractor})
         metrics, rows = scorer.score_files(options)
         results[extractor] = metrics
@@ -70,7 +79,7 @@ def rescore(args: argparse.Namespace) -> dict:
             scored_rows = rows
     if before != {str(path.resolve()): sha256(path) for path in inputs}:
         raise RuntimeError('Scoring inputs changed during rescoring; no results written.')
-    comparison = comparison_rows(results['legacy'], results['span'])
+    comparison = comparison_rows(results['legacy'], results['span'], results['span_extended'])
     baseline = args.predictions_dir / f'metrics_{args.model_name}.json'
     encoded_legacy = (json.dumps(results['legacy'], indent=2, ensure_ascii=False, sort_keys=True) + '\n').encode()
     manifest = {'extractor': args.extractor, 'python_version': sys.version,
@@ -100,7 +109,7 @@ def main() -> None:
     parser.add_argument('--input-jsonl', type=Path, required=True)
     parser.add_argument('--graph-metadata', type=Path, required=True)
     parser.add_argument('--task-set', choices=scorer.TASK_SETS, default='paper')
-    parser.add_argument('--extractor', choices=('legacy', 'span'), default='span')
+    parser.add_argument('--extractor', choices=('legacy', 'span', 'span_extended'), default='span')
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     rescore(args)

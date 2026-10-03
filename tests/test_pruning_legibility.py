@@ -108,10 +108,14 @@ def test_render_flags_only_change_attributes(tmp_path, monkeypatch):
     gen.render_graph(tmp_path / 'b', nodes, graph, 'A', 'dot', False,
                      node_fontsize=30, edge_fontsize=20, nodesep=0.2, ranksep=0.4,
                      graph_size='10,10', graph_ratio='fill', rankdir='TB')
+    gen.render_graph(tmp_path / 'c', nodes, graph, 'A', 'dot', False,
+                     edge_label_style='parens')
     assert ' size=' not in sources[0] and 'ratio=' not in sources[0]
     for attribute in ('fontsize=30', 'fontsize=20', 'nodesep=0.2', 'ranksep=0.4',
                       'size="10,10"', 'ratio=fill', 'rankdir=TB'):
         assert attribute in sources[1]
+    assert 'label="related to"' in sources[0]
+    assert 'label="(related to)"' in sources[2]
     assert json.dumps(graph, sort_keys=True) == before
 
 

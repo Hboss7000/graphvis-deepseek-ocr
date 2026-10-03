@@ -21,12 +21,14 @@ for label in ('llava_image','llava_text','llava_text_noref','llava_kg_text','dee
     print(f'| {label} | {len(rows)} | {failures} | {rate:.3f} | {dict(sorted(tiers.items()))} |' if rows else f'| {label} | 0 | n/a | n/a | missing output |')
 
 report=root/'reading_probe'/'reading_probe_report.json'
-print('\n| Probe arm | raw macro recall | raw macro precision | raw macro F1 | edge-label intrusion |')
-print('|---|---:|---:|---:|---:|')
+print('\n| Probe arm | raw macro recall | raw macro precision | raw macro F1 | intrusion raw items | intrusion distinct/graph |')
+print('|---|---:|---:|---:|---:|---:|')
 if report.exists():
     for arm, metrics in json.loads(report.read_text())['arms'].items():
-        intrusion=metrics['edge_label_intrusion']['rate']
-        print(f"| {arm} | {metrics['raw_macro_gold_node_recall']:.4f} | {metrics['raw_macro_precision']:.4f} | {metrics['raw_macro_f1']:.4f} | {intrusion:.4f} |")
+        intrusion=metrics['edge_label_intrusion']
+        raw_rate=intrusion['raw_predicted_items']['rate']
+        distinct_rate=intrusion['distinct_predicted_items_per_graph']['rate']
+        print(f"| {arm} | {metrics['raw_macro_gold_node_recall']:.4f} | {metrics['raw_macro_precision']:.4f} | {metrics['raw_macro_f1']:.4f} | {raw_rate:.4f} | {distinct_rate:.4f} |")
 else:
     print(f'Probe report missing: {report}')
 PY

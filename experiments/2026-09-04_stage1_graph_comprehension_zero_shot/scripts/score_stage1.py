@@ -758,11 +758,20 @@ def span_integer(text: str, task: str | None = None) -> int | None:
     return int(values[-1]) if values else None
 
 
-def span_degree(text: str) -> int | None:
+def span_degree(text: str, *, enhanced: bool = False) -> int | None:
     span = answer_span(text)
     compact = compact_highest_answer(span)
     if compact:
         return compact[1]
+    if enhanced:
+        enhanced_patterns = (
+            r'\bdegree\s+for\s+["“]?[^"”\n,;]+?["”]?\s+is\s+([-+]?\d+)\b',
+            r'\btotal\s+of\s+([-+]?\d+)\s+(?:connections?|edges?)\b',
+        )
+        matches = [match for pattern in enhanced_patterns
+                   for match in re.finditer(pattern, span, re.IGNORECASE)]
+        if matches:
+            return int(max(matches, key=lambda match: match.start()).group(1))
     pattern = (
         r'\b(?:degree(?:\s+of|\s+is|\s*=|\s*:)?|with\s+a\s+degree(?:\s+of)?|'
         r'has\s+(?:a\s+)?degree(?:\s+of)?)\s+([-+]?\d+)\b'
@@ -814,13 +823,31 @@ def explicit_highest_name(text: str) -> str | None:
     return candidate.strip(' \t\n:,-.\"\'“”') or None
 
 
-def span_highest_name(text: str) -> str | None:
+def span_highest_name(text: str, *, enhanced: bool = False) -> str | None:
     span = answer_span(text)
     compact = compact_highest_answer(span)
     if compact:
         return compact[0]
+    if enhanced:
+        match = re.search(
+            r'\bdegree\s+for\s+["“]?([^"”\n,;]+?)["”]?\s+is\s+[-+]?\d+\b',
+            span, re.IGNORECASE,
+        )
+        if match:
+            return match.group(1).strip(' \t\n:,- ."\'“”') or None
+        match = re.search(
+            r'\bnode\s+with\s+(?:the\s+)?(?:greatest\s+number\s+of|most|highest)\s+'
+            r'(?:connections?|degree)[^\n]*?\bis\s+["“`]?([^"”`,;:.]+?)'
+            r'["”`]?(?=\s*(?:,|with\s+(?:a\s+)?total\s+of\s+\d+\s+'
+            r'(?:connections?|edges?)|[.!?]|$))', span, re.IGNORECASE,
+        )
+        if match:
+            return match.group(1).strip(' \t\n:,- ."\'“”`') or None
     if ANSWER_MARKER_RE.search(strip_markdown(text)):
-        return parse_highest_name(span)
+        parsed = parse_highest_name(span)
+        if parsed or not enhanced:
+            return parsed
+        return explicit_highest_name(span)
     return explicit_highest_name(text) or parse_highest_name(span)
 
 
@@ -1074,8 +1101,9 @@ def score_record(record: dict, response: str, meta: dict, extractor: str = 'span
     """Score one best extraction; containment is a separate diagnostic bound."""
     if extractor == 'legacy':
         return score_record_legacy(record, response, meta)
-    if extractor != 'span':
+    if extractor not in {'span', 'span_extended'}:
         raise ValueError(f'Unknown extractor: {extractor}')
+    enhanced = extractor == 'span_extended'
     task = record['task_type']
     require_task(task, EXTENDED_TASK_TYPES)
     response = '' if response is None else str(response).strip()
@@ -1087,8 +1115,8 @@ def score_record(record: dict, response: str, meta: dict, extractor: str = 'span
         containment = integer_containment(response, row['gold_integer'])
     elif task == 'highest_node_degree':
         row = score_record_legacy(record, span, meta)
-        value = span_degree(response)
-        parsed_name = span_highest_name(response)
+        value = span_degree(response, enhanced=enhanced)
+        parsed_name = span_highest_name(response, enhanced=enhanced)
         row.update(parsed_name=parsed_name, parsed_degree=value,
                    degree_correct=value == row['gold_degree'],
                    signed_error=value - row['gold_degree'] if value is not None else None)
@@ -1142,7 +1170,7 @@ def score_record(record: dict, response: str, meta: dict, extractor: str = 'span
         by_variant = {variant: member_containment(response, gold_items, variant) for variant in SET_VARIANTS}
         row['lenient_containment_by_variant'] = by_variant
         containment = by_variant['raw']
-    row.update(extractor='span', answer_span=span, lenient_containment=containment)
+    row.update(extractor=extractor, answer_span=span, lenient_containment=containment)
     return row
 
 
@@ -1150,7 +1178,7 @@ def aggregate_task(task: str, rows: list[dict], extractor: str = 'span') -> dict
     metrics = aggregate_task_legacy(task, rows)
     if extractor == 'legacy':
         return metrics
-    if extractor != 'span':
+    if extractor not in {'span', 'span_extended'}:
         raise ValueError(f'Unknown extractor: {extractor}')
     metrics['lenient_containment'] = _mean([float(row['lenient_containment']) for row in rows])
     if task in NUMERIC_TASKS:
@@ -1413,15 +1441,20 @@ def score_files(args: argparse.Namespace) -> tuple[dict, dict[str, list[dict]]]:
             'neighbor_listing': 'Node-set precision/recall/F1 per tier and gold degree; is_correct is only a full-F1 failure-case diagnostic.',
             'shortest_path_listing': 'Ordered membership in any gold path plus hop-count accuracy and best gold-path node-set overlap F1; truncated gold counted.',
         })
-    if extractor == 'span':
+    if extractor in {'span', 'span_extended'}:
         metrics['scoring_notes'].update({
-            'extractor': 'span',
+            'extractor': extractor,
             'numeric_parse': 'Last integer in answer_span, else last in response; highest degree uses degree cues.',
             'answer_span': 'Last answer marker first. Without one, numeric/degree/name tasks prefer the last task-specific explicit graph-level answer statement before the last-nonempty-line fallback; sets retain explicit list/tuple regions including groups and trailing commentary. Paths search all traces for the last complete source-to-target chain.',
             'strict': 'Single best extraction; raw is the headline normalization. Highest-degree strict_accuracy is degree-only; strict_joint_accuracy also requires the selected node.',
             'lenient_containment': 'Diagnostic upper bound, NOT accuracy. Numeric: standalone gold integer anywhere. Relation: gold vocabulary label anywhere. Node sets: fraction of gold members mentioned. Triples: fraction with all three components mentioned, without requiring an asserted triple. Paths: any stored gold path mentioned in order, allowing intervening text. Raw headline; set/path tiers reported separately. Not a mathematical upper bound on precision/F1 because it measures gold recall.',
             'highest_node_degree_ties': 'Strict selected name may be any metadata-derived maximum-degree visible node.',
         })
+        if extractor == 'span_extended':
+            metrics['scoring_notes']['highest_node_degree_extraction'] = (
+                'Adds explicit degree-for-name-is-value and total-of-value-connections cues; '
+                'compact name, value answers are supported by both span extractors.'
+            )
         if task_types == EXTENDED_TASK_TYPES:
             metrics['scoring_notes']['relation_identification'] = 'Alphabetic lowercase vocabulary matching; last-ending match in answer span, longest overlapping label wins. Accuracy includes and excludes relatedto.'
             metrics['scoring_notes']['shortest_path_listing'] = 'Ordered membership in gold.paths; relation labels removed, repeated nodes retained and flagged degenerate. Truncated gold may omit valid paths.'
@@ -1435,7 +1468,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--predictions-dir", type=Path, required=True)
     parser.add_argument("--model-name", required=True)
     parser.add_argument("--task-set", choices=TASK_SETS, default="paper")
-    parser.add_argument("--extractor", choices=("legacy", "span"), default="span")
+    parser.add_argument("--extractor", choices=("legacy", "span", "span_extended"), default="span")
     parser.add_argument("--metrics-out", type=Path)
     parser.add_argument("--failure-cases-out", type=Path)
     return parser.parse_args()

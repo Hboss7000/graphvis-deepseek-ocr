@@ -379,6 +379,8 @@ def section_stage1(out, metrics, chart_path):
         ("highest_node_degree", "degree accuracy", lambda t: fmt_pct(t["degree_accuracy"])),
         ("highest_node_degree", "name accuracy (ties ok)",
          lambda t: fmt_pct(t["annotation_stripped"]["name_accuracy"])),
+        ("highest_node_degree", "node-only name accuracy (raw; ties ok)",
+         lambda t: fmt_pct(t["raw"]["name_accuracy"])),
         ("node_description", "micro F1 (annot. stripped)",
          lambda t: "{:.3f}".format(t["set_metrics"]["annotation_stripped"]["micro_f1"])),
         ("triple_listing", "triple micro F1",

@@ -50,13 +50,23 @@ def main() -> None:
             raise ValueError(f"{label}: statement order differs from the first arm")
         metrics = aggregate_task("node_description", rows)
         raw_metrics = metrics["set_metrics"]["raw"]
-        relation_labels = {
-            normalize_component(RELATION_TEXT.get(str(edge["relation"]), str(edge["relation"])), "basic")
-            for meta in (metadata[int(index)] for index in indices)
-            for edge in meta.get("edges", [])
-        }
-        predicted = [item for row in rows for item in parse_node_items(row.get("raw_response", ""))]
-        intrusions = sum(normalize_component(item, "basic") in relation_labels for item in predicted)
+        raw_predicted = []
+        distinct_predicted = 0
+        raw_intrusions = 0
+        distinct_intrusions = 0
+        for row in rows:
+            meta = metadata[int(row["statement_idx"])]
+            relation_labels = {
+                normalize_component(RELATION_TEXT.get(str(edge["relation"]), str(edge["relation"])), "basic")
+                for edge in meta.get("edges", [])
+            }
+            items = parse_node_items(row.get("raw_response", ""))
+            raw_predicted.extend((item, relation_labels) for item in items)
+            raw_intrusions += sum(normalize_component(item, "basic") in relation_labels
+                                  for item in items)
+            unique_items = {normalize_component(item, "basic") for item in items}
+            distinct_predicted += len(unique_items)
+            distinct_intrusions += sum(item in relation_labels for item in unique_items)
         recall = raw_metrics["macro_recall"]
         report["arms"][label] = {
             "predictions": str(path.resolve()),
@@ -65,10 +75,18 @@ def main() -> None:
             "raw_macro_precision": raw_metrics["macro_precision"],
             "raw_macro_f1": raw_metrics["macro_f1"],
             "edge_label_intrusion": {
-                "predicted_item_count": len(predicted),
-                "matching_predicted_item_count": intrusions,
-                "rate": intrusions / len(predicted) if predicted else 0.0,
-                "definition": "Predicted node items exactly equal to a rendered relation label after basic normalization.",
+                "raw_predicted_items": {
+                    "predicted_item_count": len(raw_predicted),
+                    "matching_predicted_item_count": raw_intrusions,
+                    "rate": raw_intrusions / len(raw_predicted) if raw_predicted else 0.0,
+                },
+                "distinct_predicted_items_per_graph": {
+                    "predicted_item_count": distinct_predicted,
+                    "matching_predicted_item_count": distinct_intrusions,
+                    "rate": distinct_intrusions / distinct_predicted if distinct_predicted else 0.0,
+                    "definition": "Deduplicate normalized predicted items within each graph, then pool graph-level counts.",
+                },
+                "definition": "An intrusion exactly matches a rendered relation label of that item's graph after basic normalization.",
             },
         }
     report["statement_indices"] = expected_indices

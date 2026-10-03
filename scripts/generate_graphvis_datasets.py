@@ -517,6 +517,7 @@ def render_graph(
     reveal_correct_answer=False, dpi=200, disconnected_rows=3,
     node_fontsize=18, edge_fontsize=14, nodesep=0.5, ranksep=0.7,
     graph_size=None, graph_ratio=None, rankdir="LR", wrap_labels=0,
+    edge_label_style='plain',
 ):
     dot = graphviz.Digraph(format='png', engine=engine)
     graph_attrs = {
@@ -584,7 +585,10 @@ def render_graph(
         if rel == 'relatedto' and hide_relatedto_labels:
             dot.edge(str(src), str(tgt), color='gray60', penwidth='1.0')
         else:
-            dot.edge(str(src), str(tgt), label=RELATION_TEXT.get(rel, rel), penwidth='1.3')
+            edge_label = RELATION_TEXT.get(rel, rel)
+            if edge_label_style == 'parens':
+                edge_label = f'({edge_label})'
+            dot.edge(str(src), str(tgt), label=edge_label, penwidth='1.3')
 
     dot.render(str(image_stem), cleanup=True)
     return image_stem.with_suffix('.png')
@@ -751,15 +755,18 @@ def render_selected_orientation(
     image_stem, merged_nodes, graph, correct_label, engine, hide_relatedto_labels,
     reveal_correct_answer, dpi, disconnected_rows, node_fontsize, edge_fontsize,
     nodesep, ranksep, graph_size, graph_ratio, rankdir, auto_orient, wrap_labels,
+    edge_label_style='plain',
 ):
     common = (merged_nodes, graph, correct_label, engine, hide_relatedto_labels)
     options = dict(reveal_correct_answer=reveal_correct_answer, dpi=dpi,
                    disconnected_rows=disconnected_rows, node_fontsize=node_fontsize,
                    edge_fontsize=edge_fontsize, nodesep=nodesep, ranksep=ranksep,
-                   graph_size=graph_size, graph_ratio=graph_ratio, wrap_labels=wrap_labels)
+                   graph_size=graph_size, graph_ratio=graph_ratio, wrap_labels=wrap_labels,
+                   edge_label_style=edge_label_style)
     if auto_orient == 'off':
         path = render_graph(image_stem, *common, rankdir=rankdir, **options)
-        return path, None
+        return path, ({'edge_label_style': edge_label_style}
+                      if edge_label_style != 'plain' else None)
 
     from PIL import Image
     image_stem.parent.mkdir(parents=True, exist_ok=True)
@@ -781,7 +788,9 @@ def render_selected_orientation(
                         'llava_selected_grid': {'height': selected_grid[0],
                                                 'width': selected_grid[1]},
                         'auto_orient_scales': {'LR': candidates['LR'][1],
-                                               'TB': candidates['TB'][1]}}
+                                               'TB': candidates['TB'][1]},
+                        **({'edge_label_style': edge_label_style}
+                           if edge_label_style != 'plain' else {})}
 
 
 def write_jsonl(path, records):
@@ -862,6 +871,8 @@ def parse_args():
                         help='Render LR and TB candidates and select the larger LLaVA resize factor.')
     parser.add_argument('--wrap-labels', type=int, default=0,
                         help='Wrap long visible node labels in images only; 0 disables wrapping.')
+    parser.add_argument('--edge-label-style', choices=['plain', 'parens'], default='plain',
+                        help='Visible edge relation labels; parens wraps relation text in parentheses.')
     parser.add_argument('--dpi', type=int, default=200, help='Rendered PNG resolution.')
     parser.add_argument(
         '--disconnected-rows', type=int, default=3,
@@ -947,6 +958,7 @@ def main():
             args.reveal_correct_answer, args.dpi, args.disconnected_rows,
             args.node_fontsize, args.edge_fontsize, args.nodesep, args.ranksep,
             args.graph_size, args.graph_ratio, args.rankdir, args.auto_orient, args.wrap_labels,
+            args.edge_label_style,
         )
         rel_image_path = image_path.relative_to(args.out_dir)
 

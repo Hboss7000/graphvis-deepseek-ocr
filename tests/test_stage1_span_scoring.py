@@ -54,6 +54,37 @@ def test_highest_degree_strict_name_does_not_use_all_mentions():
     assert row['degree_correct'] and not row['is_correct'] and row['lenient_containment']
 
 
+@pytest.mark.parametrize(('response', 'degree', 'name'), [
+    ('degree for hub is 2', 2, 'hub'),
+    ('total of 2 connections', 2, None),
+    ('hub, 2', 2, 'hub'),
+])
+def test_enhanced_highest_degree_patterns_keep_prior_extractors_selectable(response, degree, name):
+    meta = {'visible_nodes': [{'cid': 1, 'name': 'hub'}, {'cid': 2, 'name': 'leaf'}],
+            'edges': [{'source_cid': 1, 'target_cid': 2},
+                      {'source_cid': 1, 'target_cid': 2}]}
+    record = {'task_type': 'highest_node_degree', 'answer': 'hub with a degree of 2'}
+    old = scorer.score_record(record, response, meta, extractor='span')
+    enhanced = scorer.score_record(record, response, meta, extractor='span_extended')
+    assert old['extractor'] == 'span'
+    assert enhanced['extractor'] == 'span_extended'
+    assert enhanced['parsed_degree'] == degree
+    assert enhanced['parsed_name'] == name
+    assert enhanced['degree_correct']
+    assert enhanced['name_correct_raw'] is (name == 'hub')
+    # New patterns are opt-in; the pre-existing compact form already worked.
+    if response == 'hub, 2':
+        assert old['parsed_degree'] == degree and old['parsed_name'] == name
+    else:
+        assert old['parsed_degree'] is None
+
+
+def test_enhanced_highest_degree_total_connections_name_cue():
+    text = 'The node with the greatest number of connections is power with a total of 10 connections.'
+    assert scorer.span_degree(text, enhanced=True) == 10
+    assert scorer.span_highest_name(text, enhanced=True) == 'power'
+
+
 @pytest.mark.parametrize('tail', ['', '\n\nThis connection is labeled "related to".\n\n'
     'There are no other nodes directly connected to "looking" in the graph.'])
 def test_looking_neighbor(tail):

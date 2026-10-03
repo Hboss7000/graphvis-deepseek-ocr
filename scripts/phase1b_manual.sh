@@ -22,6 +22,7 @@ readonly PROBE_DATA="${OUTPUTS_ROOT}/phase1_reading_probe/data"
 readonly A_ROOT="${OUTPUTS_ROOT}/inference50_2026-10-03_corekeep_budget18_e30_tb30"
 readonly B_ROOT="${OUTPUTS_ROOT}/inference50_2026-10-03_corekeep_budget18_e30_auto_orient_tb30"
 readonly C_ROOT="${OUTPUTS_ROOT}/inference50_2026-10-03_corekeep_budget18_e30_auto_orient_wrap14_tb30"
+readonly D_ROOT="${OUTPUTS_ROOT}/inference50_2026-10-03_corekeep_budget18_e30_auto_orient_parens_tb30"
 readonly QA_INPUT="${DRY_ROOT}/data/stage2_qa_8graphs.jsonl"
 readonly QA_METADATA="${DRY_ROOT}/data/graph_metadata_8graphs.jsonl"
 readonly LOG_ROOT="${WORKSPACE}/logs/phase1b"
@@ -46,17 +47,18 @@ for required in "${QWEN_PYTHON}" "${OCR2_PYTHON}" "${QA_INPUT}" "${QA_METADATA}"
   "${PROBE_DATA}/graph_metadata_first20.jsonl"; do
   [[ -e "${required}" ]] || { echo "ERROR: missing required phase-1 artifact: ${required}" >&2; exit 2; }
 done
-for root in "${A_ROOT}" "${B_ROOT}" "${C_ROOT}"; do
+for root in "${A_ROOT}" "${B_ROOT}" "${C_ROOT}" "${D_ROOT}"; do
   [[ -f "${root}/test/graph_metadata_subset50_seed13.jsonl" && -d "${root}/test/images" ]] || {
     echo "ERROR: config images/metadata not synced: ${root}" >&2; exit 2;
   }
 done
 
 cat <<EOF
-Required B/C sync from the laptop, run from the repository root:
+Required B/C/D sync from the laptop, run from the repository root:
 rsync -rltvz --no-owner --no-group -e 'ssh -i ~/.ssh/id_ed25519 -p 15268' \\
   outputs/inference50_2026-10-03_corekeep_budget18_e30_auto_orient_tb30 \\
   outputs/inference50_2026-10-03_corekeep_budget18_e30_auto_orient_wrap14_tb30 \\
+  outputs/inference50_2026-10-03_corekeep_budget18_e30_auto_orient_parens_tb30 \\
   root@216.243.220.174:/workspace/bachelorArbeit/outputs/
 EOF
 
@@ -139,6 +141,13 @@ for config in A B C; do
     --behavior-only --approve-prompts --resume
 done
 
+run_job "llava_probe_D" "${LLAVA_PYTHON}" "${STAGE1_RUNNER}/run_stage1_llava.py" \
+  --model-id "${LLAVA_ID}" --revision "${LLAVA_REV}" \
+  --input-jsonl "${PROBE_INPUT}" --graph-metadata "${PROBE_METADATA}" --image-root "${D_ROOT}" \
+  --output-dir "${PROBE_ROOT}/llava_D" --expected-count 20 --expected-split test \
+  --task-set extended --answer-format none --max-new-tokens 1024 --seed 13 \
+  --behavior-only --approve-prompts --resume
+
 run_job deepseek_qa_image "${OCR2_PYTHON}" \
   "${REPO_ROOT}/experiments/2026-08-25_zero_shot_obqa_500_multimodal/scripts/run_zero_shot.py" \
   --model-id "${DEEPSEEK_ID}" --revision "${DEEPSEEK_REV}" \
@@ -152,6 +161,7 @@ run_job phase1b_probe_report "${QWEN_PYTHON}" scripts/report_inference50_reading
   --arm "llava_A=${PROBE_ROOT}/llava_A/predictions_llava_node_description.jsonl" \
   --arm "llava_B=${PROBE_ROOT}/llava_B/predictions_llava_node_description.jsonl" \
   --arm "llava_C=${PROBE_ROOT}/llava_C/predictions_llava_node_description.jsonl" \
+  --arm "llava_D=${PROBE_ROOT}/llava_D/predictions_llava_node_description.jsonl" \
   --expected-count 20 --output "${PROBE_ROOT}/reading_probe_report.json"
 
 echo
