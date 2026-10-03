@@ -328,6 +328,7 @@ def score_completed_run(
     output_dir: Path,
     model_name: str,
     task_set: str = "paper",
+    extractor: str = "span",
 ) -> None:
     task_types = TASK_SETS[task_set]
     scoring_args = argparse.Namespace(
@@ -336,6 +337,7 @@ def score_completed_run(
         predictions_dir=output_dir,
         model_name=model_name,
         task_set=task_set,
+        extractor=extractor,
     )
     metrics, rows_by_task = score_files(scoring_args)
     metrics_path = output_dir / f"metrics_{model_name}.json"

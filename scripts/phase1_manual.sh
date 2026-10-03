@@ -16,6 +16,7 @@ readonly WORKSPACE=/workspace
 readonly REPO_ROOT=/workspace/bachelorArbeit
 readonly OUTPUTS_ROOT="${REPO_ROOT}/outputs"
 readonly STAGE1_TOKEN_LIMIT=1024
+readonly SCORER_EXTRACTOR="${SCORER_EXTRACTOR:-span}"
 readonly QA_TOKEN_LIMIT=64
 readonly SPLIT_ROOT="${OUTPUTS_ROOT}/inference50_2026-10-03_corekeep_budget18_e30_tb30"
 readonly DEFAULT_RENDER_ROOT="${OUTPUTS_ROOT}/inference50_2026-10-03_corekeep_budget18_e30_default_render"
@@ -176,28 +177,28 @@ run_job deepseek_stage1_8g "${OCR2_PYTHON}" "${STAGE1_RUNNERS}/run_stage1_deepse
   --model-id "${DEEPSEEK_ID}" --revision "${DEEPSEEK_REV}" \
   --input-jsonl "${DRY_STAGE1}" --graph-metadata "${DRY_METADATA}" --image-root "${SPLIT_ROOT}" \
   --output-dir "${DRY_ROOT}/runs/deepseek_stage1" --expected-count 72 --expected-split test \
-  --task-set extended --answer-format none --prompt-variant standard --seed 13 --max-new-tokens "${STAGE1_TOKEN_LIMIT}" \
+  --task-set extended --extractor "${SCORER_EXTRACTOR}" --answer-format none --prompt-variant standard --seed 13 --max-new-tokens "${STAGE1_TOKEN_LIMIT}" \
   --approve-prompts --resume
 
 run_job qwen_stage1_8g "${QWEN_PYTHON}" "${STAGE1_RUNNERS}/run_stage1_qwen.py" \
   --model-id "${QWEN_ID}" --revision "${QWEN_REV}" \
   --input-jsonl "${DRY_STAGE1}" --graph-metadata "${DRY_METADATA}" --image-root "${SPLIT_ROOT}" \
   --output-dir "${DRY_ROOT}/runs/qwen_stage1" --expected-count 72 --expected-split test \
-  --task-set extended --answer-format none --min-pixels 262144 --max-pixels 1310720 \
+  --task-set extended --extractor "${SCORER_EXTRACTOR}" --answer-format none --min-pixels 262144 --max-pixels 1310720 \
   --max-new-tokens "${STAGE1_TOKEN_LIMIT}" --seed 13 --approve-prompts --resume
 
 run_job llava_stage1_8g "${LLAVA_PYTHON}" "${STAGE1_RUNNERS}/run_stage1_llava.py" \
   --model-id "${LLAVA_ID}" --revision "${LLAVA_REV}" \
   --input-jsonl "${DRY_STAGE1}" --graph-metadata "${DRY_METADATA}" --image-root "${SPLIT_ROOT}" \
   --output-dir "${DRY_ROOT}/runs/llava_stage1" --expected-count 72 --expected-split test \
-  --task-set extended --answer-format none --max-new-tokens "${STAGE1_TOKEN_LIMIT}" --seed 13 --approve-prompts --resume
+  --task-set extended --extractor "${SCORER_EXTRACTOR}" --answer-format none --max-new-tokens "${STAGE1_TOKEN_LIMIT}" --seed 13 --approve-prompts --resume
 
 # Gemma's own runner requires this double-crop legibility gate before image inference.
 run_job gemma_stage1_preflight_8g "${QWEN_PYTHON}" scripts/eval_gemma3_stage1.py \
   --model-id "${GEMMA_ID}" --revision "${GEMMA_REV}" \
   --input-jsonl "${DRY_STAGE1}" --graph-metadata "${DRY_METADATA}" --image-root "${SPLIT_ROOT}" \
   --output-dir "${DRY_ROOT}/runs/gemma_stage1_preflight" --expected-count 72 --expected-split test \
-  --task-set extended --answer-format none --max-new-tokens "${STAGE1_TOKEN_LIMIT}" --attn-impl eager --pan-and-scan \
+  --task-set extended --extractor "${SCORER_EXTRACTOR}" --answer-format none --max-new-tokens "${STAGE1_TOKEN_LIMIT}" --attn-impl eager --pan-and-scan \
   --pan-and-scan-min-crop-size 256 --pan-and-scan-max-num-crops 4 \
   --pan-and-scan-min-ratio-to-activate 1.2 --cache-implementation dynamic --batch-size 1 --seed 13 \
   --preflight 8 --preflight-min-recall 0.95 --approve-prompts --resume
@@ -206,7 +207,7 @@ run_job gemma_stage1_8g "${QWEN_PYTHON}" scripts/eval_gemma3_stage1.py \
   --model-id "${GEMMA_ID}" --revision "${GEMMA_REV}" \
   --input-jsonl "${DRY_STAGE1}" --graph-metadata "${DRY_METADATA}" --image-root "${SPLIT_ROOT}" \
   --output-dir "${DRY_ROOT}/runs/gemma_stage1" --expected-count 72 --expected-split test \
-  --task-set extended --answer-format none --max-new-tokens "${STAGE1_TOKEN_LIMIT}" --attn-impl eager --pan-and-scan \
+  --task-set extended --extractor "${SCORER_EXTRACTOR}" --answer-format none --max-new-tokens "${STAGE1_TOKEN_LIMIT}" --attn-impl eager --pan-and-scan \
   --pan-and-scan-min-crop-size 256 --pan-and-scan-max-num-crops 4 \
   --pan-and-scan-min-ratio-to-activate 1.2 --cache-implementation dynamic --batch-size 1 --seed 13 \
   --preflight-report "${DRY_ROOT}/runs/gemma_stage1_preflight/preflight_report.json" --approve-prompts --resume
@@ -247,19 +248,19 @@ run_job probe_llava_default_render "${LLAVA_PYTHON}" "${STAGE1_RUNNERS}/run_stag
   --model-id "${LLAVA_ID}" --revision "${LLAVA_REV}" --input-jsonl "${PROBE_STAGE1}" \
   --graph-metadata "${PROBE_METADATA}" --image-root "${DEFAULT_RENDER_ROOT}" \
   --output-dir "${PROBE_ROOT}/runs/llava_default_render" --expected-count 20 --expected-split test \
-  --task-set extended --answer-format none --max-new-tokens 1024 --seed 13 --behavior-only --approve-prompts --resume
+  --task-set extended --extractor "${SCORER_EXTRACTOR}" --answer-format none --max-new-tokens 1024 --seed 13 --behavior-only --approve-prompts --resume
 
 run_job probe_llava_tb30 "${LLAVA_PYTHON}" "${STAGE1_RUNNERS}/run_stage1_llava.py" \
   --model-id "${LLAVA_ID}" --revision "${LLAVA_REV}" --input-jsonl "${PROBE_STAGE1}" \
   --graph-metadata "${PROBE_METADATA}" --image-root "${SPLIT_ROOT}" \
   --output-dir "${PROBE_ROOT}/runs/llava_tb30" --expected-count 20 --expected-split test \
-  --task-set extended --answer-format none --max-new-tokens 1024 --seed 13 --behavior-only --approve-prompts --resume
+  --task-set extended --extractor "${SCORER_EXTRACTOR}" --answer-format none --max-new-tokens 1024 --seed 13 --behavior-only --approve-prompts --resume
 
 run_job probe_qwen_tb30 "${QWEN_PYTHON}" "${STAGE1_RUNNERS}/run_stage1_qwen.py" \
   --model-id "${QWEN_ID}" --revision "${QWEN_REV}" --input-jsonl "${PROBE_STAGE1}" \
   --graph-metadata "${PROBE_METADATA}" --image-root "${SPLIT_ROOT}" \
   --output-dir "${PROBE_ROOT}/runs/qwen_tb30" --expected-count 20 --expected-split test \
-  --task-set extended --answer-format none --min-pixels 262144 --max-pixels 1310720 \
+  --task-set extended --extractor "${SCORER_EXTRACTOR}" --answer-format none --min-pixels 262144 --max-pixels 1310720 \
   --max-new-tokens 1024 --seed 13 --behavior-only --approve-prompts --resume
 
 run_job probe_report "${QWEN_PYTHON}" scripts/report_inference50_reading_probe.py \

@@ -66,6 +66,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--expected-count", type=int, default=3000)
     parser.add_argument("--expected-split", choices=("train", "dev", "test"), default="test")
     parser.add_argument("--task-set", choices=TASK_SETS, default="paper")
+    parser.add_argument("--extractor", choices=("legacy", "span", "span_extended"), default="span")
     parser.add_argument("--answer-format", choices=ANSWER_FORMATS, default="none")
     parser.add_argument("--min-pixels", type=int, default=DEFAULT_MIN_PIXELS)
     parser.add_argument("--max-pixels", type=int, default=DEFAULT_MAX_PIXELS)
@@ -216,6 +217,7 @@ def main() -> None:
     loading_seconds = perf_counter() - load_started
     run_config = {
         "model_name": MODEL_NAME,
+        "extractor": args.extractor,
         "model_id": args.model_id,
         "model_revision": args.revision,
         "condition": "image",
@@ -341,7 +343,7 @@ def main() -> None:
                 "generation_elapsed_seconds": generation_elapsed_seconds,
                 "peak_memory_allocated_bytes": peak_memory_allocated_bytes,
                 **format_diagnostics,
-                **score_record(record, response, metadata_by_idx[idx]),
+                **score_record(record, response, metadata_by_idx[idx], extractor=args.extractor),
                 "model_id": args.model_id,
                 "model_revision": args.revision,
                 "timestamp_utc": datetime.now(timezone.utc).isoformat(),
@@ -365,7 +367,7 @@ def main() -> None:
         print("Behavior-only probe complete; aggregate scoring intentionally skipped.", flush=True)
     else:
         score_completed_run(
-            args.input_jsonl, args.graph_metadata, args.output_dir, MODEL_NAME, args.task_set
+            args.input_jsonl, args.graph_metadata, args.output_dir, MODEL_NAME, args.task_set, args.extractor
         )
 
 

@@ -66,6 +66,7 @@ def parse_args() -> argparse.Namespace:
         help="Confirm the printed prompts were reviewed and permit inference",
     )
     parser.add_argument('--task-set', choices=('paper', 'extended'), default='paper')
+    parser.add_argument('--extractor', choices=('legacy', 'span', 'span_extended'), default='span')
     parser.add_argument('--preflight', nargs='?', const=50, type=int,
                         help='Run triple_listing on N graphs with BOTH crop settings (default N=50)')
     parser.add_argument('--preflight-min-recall', type=float, default=0.95,
@@ -101,7 +102,7 @@ def make_result(record, response, generated_tokens, hit_ceiling, image_views,
         "generated_token_count": generated_tokens,
         "hit_token_ceiling": hit_ceiling,
         **format_diagnostics,
-        **score_record(record, response, metadata),
+        **score_record(record, response, metadata, extractor=args.extractor),
         "model_id": args.model_id,
         "model_revision": args.revision,
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
@@ -272,6 +273,7 @@ def main() -> None:
     )
     run_config = {
         "model_name": MODEL_NAME,
+        "extractor": args.extractor,
         "model_id": args.model_id,
         "model_revision": args.revision,
         "condition": "image",
@@ -381,7 +383,7 @@ def main() -> None:
     if len(done) != len(records):
         raise RuntimeError(f"Run ended with {len(done)}/{len(records)} completed predictions")
     print(f"Generated {generated_count} new predictions; {len(done)} total complete.", flush=True)
-    score_completed_run(args.input_jsonl, args.graph_metadata, args.output_dir, MODEL_NAME, args.task_set)
+    score_completed_run(args.input_jsonl, args.graph_metadata, args.output_dir, MODEL_NAME, args.task_set, args.extractor)
 
 
 if __name__ == "__main__":

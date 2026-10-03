@@ -60,12 +60,21 @@ def status(label):
     path = dry / 'status' / f'{label}.json'
     return json.loads(path.read_text()) if path.exists() else None
 
-print('| runner | records | s/item | peak VRAM | ceiling hits | parse failures | exit |')
-print('|---|---:|---:|---:|---:|---:|---:|')
+print('| runner | extractor | records | s/item | peak VRAM | ceiling hits | parse failures | exit |')
+print('|---|---|---:|---:|---:|---:|---:|---:|')
 total_projected_seconds = 0.0
 projection_available = True
 for name, (root, label) in jobs.items():
     rows = read_rows(root) if root.exists() else []
+    config_path = root / 'run_config.json'
+    metric_files = sorted(root.glob('metrics_*.json')) if root.exists() else []
+    if config_path.exists():
+        extractor = json.loads(config_path.read_text()).get('extractor')
+    elif metric_files:
+        extractor = json.loads(metric_files[0].read_text()).get('scoring_notes', {}).get('extractor')
+    else:
+        extractor = None
+    extractor = extractor or ('n/a' if ' QA' in name else 'unknown')
     timing = [float(row['generation_elapsed_seconds']) for row in rows
               if row.get('generation_elapsed_seconds') is not None]
     run = status(label)
@@ -92,7 +101,7 @@ for name, (root, label) in jobs.items():
                          ('parse_tier' not in row and not str(row.get('raw_response', '')).strip())
                          for row in rows)
     exit_code = run['exit_code'] if run else 'n/a'
-print(f'| {name} | {len(rows)} | {timing_text} | {peak_text} | {ceilings} | {parse_failures} | {exit_code} |')
+print(f'| {name} | {extractor} | {len(rows)} | {timing_text} | {peak_text} | {ceilings} | {parse_failures} | {exit_code} |')
     # The full split has 50 question graphs: 450 extended Stage-1 records and
     # 50 QA records. For timed runners, retain one model-load wall cost and
     # scale only subsequent item generation. For Gemma's wall-only fallback,

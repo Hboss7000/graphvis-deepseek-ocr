@@ -13,7 +13,16 @@ STAGE1 = ROOT / "experiments/2026-09-04_stage1_graph_comprehension_zero_shot/scr
 sys.path.insert(0, str(STAGE1))
 from score_stage1 import aggregate_task, read_jsonl  # noqa: E402
 from score_stage1 import normalize_component, parse_node_items  # noqa: E402
-from generate_graphvis_datasets import RELATION_TEXT  # noqa: E402
+
+# Kept local so this read-only report works in inference venvs without Graphviz.
+RELATION_TEXT = {
+    'antonym': 'antonym', 'atlocation': 'at location', 'capableof': 'capable of',
+    'causes': 'causes', 'createdby': 'created by', 'isa': 'is a', 'desires': 'desires',
+    'hassubevent': 'has subevent', 'partof': 'part of', 'hascontext': 'has context',
+    'hasproperty': 'has property', 'madeof': 'made of', 'notcapableof': 'not capable of',
+    'notdesires': 'not desires', 'receivesaction': 'receives action',
+    'relatedto': 'related to', 'usedfor': 'used for',
+}
 
 
 def main() -> None:

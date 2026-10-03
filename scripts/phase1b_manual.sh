@@ -141,7 +141,7 @@ for config in A B C; do
     --behavior-only --approve-prompts --resume
 done
 
-run_job "llava_probe_D" "${LLAVA_PYTHON}" "${STAGE1_RUNNER}/run_stage1_llava.py" \
+run_job "llava_probe_D" "${LLAVA_PYTHON}" "${STAGE1_RUNNER}" \
   --model-id "${LLAVA_ID}" --revision "${LLAVA_REV}" \
   --input-jsonl "${PROBE_INPUT}" --graph-metadata "${PROBE_METADATA}" --image-root "${D_ROOT}" \
   --output-dir "${PROBE_ROOT}/llava_D" --expected-count 20 --expected-split test \

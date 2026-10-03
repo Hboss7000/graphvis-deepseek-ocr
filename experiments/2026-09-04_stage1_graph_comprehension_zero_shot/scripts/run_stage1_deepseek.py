@@ -63,6 +63,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--expected-count", type=int, default=3000)
     parser.add_argument("--expected-split", choices=("train", "dev", "test"), default="test")
     parser.add_argument("--task-set", choices=TASK_SETS, default="paper")
+    parser.add_argument("--extractor", choices=("legacy", "span", "span_extended"), default="span")
     parser.add_argument("--answer-format", choices=ANSWER_FORMATS, default="none")
     parser.add_argument("--prompt-variant", choices=DEEPSEEK_PROMPT_VARIANTS, default="standard")
     parser.add_argument(
@@ -180,6 +181,7 @@ def main() -> None:
         }
     run_config = {
         "model_name": MODEL_NAME,
+        "extractor": args.extractor,
         "model_id": args.model_id,
         "model_revision": args.revision,
         "condition": "image",
@@ -310,7 +312,7 @@ def main() -> None:
                 "hit_token_ceiling": hit_ceiling,
                 "vision_tokens_per_item": None,
                 **format_diagnostics,
-                **score_record(record, response, metadata_by_idx[idx]),
+                **score_record(record, response, metadata_by_idx[idx], extractor=args.extractor),
                 "model_id": args.model_id,
                 "model_revision": args.revision,
                 "timestamp_utc": datetime.now(timezone.utc).isoformat(),
@@ -334,7 +336,7 @@ def main() -> None:
         print("Behavior-only ablation complete; aggregate task scoring intentionally skipped.", flush=True)
     else:
         score_completed_run(
-            args.input_jsonl, args.graph_metadata, args.output_dir, MODEL_NAME, args.task_set
+            args.input_jsonl, args.graph_metadata, args.output_dir, MODEL_NAME, args.task_set, args.extractor
         )
 
 

@@ -47,10 +47,14 @@ def fmt(value):
 
 
 metrics = {}
+extractors = {}
 for path in sorted((root / "phase1_dryrun" / "runs").glob("*stage1*/metrics_*.json")):
     data = json.loads(path.read_text())
-    metrics[data.get("model_name", path.stem)] = data.get("tasks", {})
+    model = data.get("model_name", path.stem)
+    metrics[model] = data.get("tasks", {})
+    extractors[model] = data.get("scoring_notes", {}).get("extractor", "unknown")
 models = [m for m in MODELS if m in metrics] + [m for m in metrics if m not in MODELS]
+print("Scorer extractor by model: " + ", ".join(f"{m}={extractors[m]}" for m in models))
 
 TABLES = [
     ("Strict accuracy (%)  — exact answer, as in paper Table 4", ["strict_accuracy", "exact_accuracy",
@@ -66,12 +70,13 @@ for title, endings in TABLES:
         cells = [fmt(pick(metrics[m].get(task, {}), endings)) for m in models]
         print(f"{task:<25}" + "".join(f"{c:>10}" for c in cells))
 
-print("\nHighest-degree node-only name accuracy (%)  — raw normalization, ties accepted")
+print("\nHighest-degree node-only name accuracy (%) — ties accepted")
 print(f"{'task':<25}" + "".join(f"{m:>10}" for m in models))
 print("-" * (25 + 10 * len(models)))
-cells = [fmt(pick(metrics[m].get("highest_node_degree", {}), ["name_accuracy"], prefer="raw"))
-         for m in models]
-print(f"{'highest_node_degree':<25}" + "".join(f"{c:>10}" for c in cells))
+for tier in ("raw", "basic"):
+    cells = [fmt(metrics[m].get("highest_node_degree", {}).get(tier, {}).get("name_accuracy"))
+             for m in models]
+    print(f"{('raw ' if tier == 'raw' else 'basic ')}{'highest_node_degree':<19}" + "".join(f"{c:>10}" for c in cells))
 
 probe = root / "phase1_reading_probe" / "runs" / "reading_probe_report.json"
 if probe.exists():
