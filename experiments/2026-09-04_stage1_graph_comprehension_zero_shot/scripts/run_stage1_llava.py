@@ -222,6 +222,7 @@ def main() -> None:
         "prompt_bodies_sha256": prompt_bodies_sha256(records, args.answer_format),
         "generation": {"do_sample": False, "num_beams": 1,
                        "max_new_tokens": args.max_new_tokens},
+        "effective_max_new_tokens": args.max_new_tokens,
         "dtype": "torch.bfloat16",
         "image_processing": {"mode": "processor_default_anyres",
                              "processor_token_expansion": processor_expansion,

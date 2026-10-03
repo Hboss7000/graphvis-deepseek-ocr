@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -94,3 +95,94 @@ def test_llava_qa_resume_skips_completed_indices_and_rejects_duplicates(tmp_path
     write_jsonl(path, [{"statement_idx": 3}, {"statement_idx": 3}])
     with pytest.raises(ValueError, match="Duplicate"):
         llava_common.completed_qa_indices(path)
+
+
+@pytest.mark.parametrize("condition", prompt_common.CONDITIONS)
+def test_llava_qa_fresh_output_generates_all_eight_rows(tmp_path, monkeypatch, condition):
+    import types
+
+    records = []
+    metadata = []
+    for index in range(8):
+        prompt = prompt_common.IMAGE_REFERENCE_SENTENCE + "Question? Choices A-D."
+        records.append({"statement_idx": index, "image": f"q{index}.png",
+                        "prompt": prompt, "answer": "A"})
+        metadata.append({"statement_idx": index, "visible_nodes": [
+            {"cid": 1, "name": "alpha", "connected": True},
+            {"cid": 2, "name": "beta", "connected": True}],
+            "edges": [{"source_cid": 1, "target_cid": 2, "relation": "isa"}]})
+    input_path, metadata_path = tmp_path / "input.jsonl", tmp_path / "metadata.jsonl"
+    write_jsonl(input_path, records)
+    write_jsonl(metadata_path, metadata)
+    output_path = tmp_path / "fresh" / "predictions.jsonl"
+
+    class FakeImage:
+        size = (100, 80)
+
+        def convert(self, mode):
+            assert mode == "RGB"
+            return self
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+    class FakeProcessor:
+        tokenizer = None
+
+        @classmethod
+        def from_pretrained(cls, *args, **kwargs):
+            instance = cls()
+            instance.tokenizer = instance
+            return instance
+
+        def apply_chat_template(self, messages, tokenize, add_generation_prompt):
+            return messages[0]["content"]
+
+    class FakeModel:
+        generation_config = SimpleNamespace()
+
+        @classmethod
+        def from_pretrained(cls, *args, **kwargs):
+            return cls()
+
+        def eval(self):
+            return self
+
+    fake_transformers = types.ModuleType("transformers")
+    fake_transformers.__version__ = "test"
+    fake_transformers.set_seed = lambda seed: None
+    fake_transformers.LlavaNextConfig = SimpleNamespace(from_pretrained=lambda *a, **k: SimpleNamespace(
+        vision_config=SimpleNamespace(patch_size=14), vision_feature_select_strategy="default"))
+    fake_transformers.LlavaNextForConditionalGeneration = FakeModel
+    fake_transformers.LlavaNextProcessor = FakeProcessor
+    fake_torch = SimpleNamespace(cuda=SimpleNamespace(is_available=lambda: True),
+                                  bfloat16="bf16", __version__="test-torch")
+    fake_pil = types.ModuleType("PIL")
+    fake_pil.Image = SimpleNamespace(open=lambda path: FakeImage())
+    monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
+    monkeypatch.setitem(sys.modules, "torch", fake_torch)
+    monkeypatch.setitem(sys.modules, "PIL", fake_pil)
+    monkeypatch.setattr(run_zero_shot_llava, "prepare_inputs", lambda *args: {})
+    monkeypatch.setattr(run_zero_shot_llava, "image_diagnostics", lambda *args: {"stub": True})
+    monkeypatch.setattr(run_zero_shot_llava, "infer_one",
+                        lambda *args: ("A", 1, False, 0, 0.01, 123))
+    monkeypatch.setattr(sys, "argv", ["run_zero_shot_llava.py", "--revision", "a" * 40,
+        "--input-jsonl", str(input_path), "--graph-metadata", str(metadata_path),
+        "--image-root", str(tmp_path), "--output-jsonl", str(output_path),
+        "--condition", condition, "--expected-count", "8", "--max-new-tokens", "64",
+        "--approve-prompt-diff", "--resume"])
+    run_zero_shot_llava.main()
+    rows = [json.loads(line) for line in output_path.read_text().splitlines()]
+    config = json.loads((output_path.parent / "run_config.json").read_text())
+    assert len(rows) == 8
+    assert config["effective_max_new_tokens"] == config["generation"]["max_new_tokens"] == 64
+
+
+def test_llava_qa_fresh_path_cannot_silently_skip_every_input(tmp_path, monkeypatch):
+    with pytest.raises(RuntimeError, match="generated zero predictions"):
+        run_zero_shot_llava.require_fresh_output_progress(False, 8, 0)
+    run_zero_shot_llava.require_fresh_output_progress(False, 8, 8)
+    run_zero_shot_llava.require_fresh_output_progress(True, 8, 0)

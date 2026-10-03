@@ -320,6 +320,7 @@ def write_run_config(args: argparse.Namespace, transformers_version: str,
             "max_new_tokens": effective_max_new_tokens,
             "no_repeat_ngram_size": NO_REPEAT_NGRAM_SIZE,
         },
+        "effective_max_new_tokens": effective_max_new_tokens,
         "image_processing": {
             "base_size": BASE_SIZE,
             "image_size": IMAGE_SIZE,

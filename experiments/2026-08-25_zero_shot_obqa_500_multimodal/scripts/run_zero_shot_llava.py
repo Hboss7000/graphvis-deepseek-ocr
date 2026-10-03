@@ -62,6 +62,15 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def require_fresh_output_progress(output_existed: bool, input_count: int,
+                                  generated_count: int) -> None:
+    if not output_existed and input_count > 0 and generated_count == 0:
+        raise RuntimeError(
+            "LLaVA QA generated zero predictions for a non-empty input and a fresh output path; "
+            "resume selection skipped every row."
+        )
+
+
 def infer_one(model, processor, prompt_text, image, args, torch):
     inputs = prepare_inputs(processor, prompt_text, image)
     vision_tokens = int((inputs["input_ids"] == image_token_id(processor)).sum().item())
@@ -105,6 +114,7 @@ def write_run_config(args, records, metadata_by_idx, transformers_version,
         "prompt_bodies_sha256": prompt_bodies_sha256(records, metadata_by_idx, args.condition),
         "generation": {"do_sample": False, "num_beams": 1,
                        "max_new_tokens": args.max_new_tokens},
+        "effective_max_new_tokens": args.max_new_tokens,
         "dtype": "torch.bfloat16",
         "image_processing": {"mode": "processor_default_anyres",
                              "processor_token_expansion": processor_expansion,
@@ -171,7 +181,8 @@ def main() -> None:
         raise SystemExit("Refusing inference until prompt previews are approved; use --approve-prompt-diff")
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is required")
-    if args.output_jsonl.exists() and not args.resume:
+    output_existed = args.output_jsonl.exists()
+    if output_existed and not args.resume:
         raise FileExistsError(f"Use --resume or a fresh output path: {args.output_jsonl}")
     done = completed_qa_indices(args.output_jsonl) if args.resume else set()
     input_indices = {int(row["statement_idx"]) for row in records}
@@ -200,8 +211,9 @@ def main() -> None:
         )
 
     tiers = Counter()
-    if args.resume:
+    if args.resume and args.output_jsonl.exists():
         tiers.update(row.get("parse_tier", "MISSING") for row in read_jsonl(args.output_jsonl))
+    generated_count = 0
     with args.output_jsonl.open("a", encoding="utf-8") as output:
         for position, record in enumerate(records, start=1):
             statement_idx = int(record["statement_idx"])
@@ -241,8 +253,10 @@ def main() -> None:
             output.write(json.dumps(result, ensure_ascii=False) + "\n")
             output.flush()
             done.add(statement_idx)
+            generated_count += 1
             print(f"[{position}/{len(records)}] condition={args.condition} q={statement_idx} "
                   f"predicted={predicted or 'FAILED'} tokens={tokens} ceiling={ceiling}", flush=True)
+    require_fresh_output_progress(output_existed, len(records), generated_count)
     if done != input_indices:
         raise RuntimeError(f"Run ended with {len(done)}/{len(input_indices)} completed keys")
     print("PARSE TIER DISTRIBUTION: " + json.dumps(dict(sorted(tiers.items()))), flush=True)

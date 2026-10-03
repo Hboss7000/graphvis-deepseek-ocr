@@ -107,6 +107,7 @@ def write_run_config(
             "visible_nodes with connected=false are drawn in the image condition "
             "but omitted from kg_text because they produce no triples"
         ),
+        "effective_max_new_tokens": args.max_new_tokens,
         "transformers_version": transformers_version,
         "processor_pixel_budget_api": processor_budget_api,
         "max_new_tokens": args.max_new_tokens,
@@ -117,8 +118,7 @@ def write_run_config(
         "first_image_budget": first_image_budget,
         "visual_budget_note": gemma.RESOLUTION_NOTE,
         "decoding_budget_note": (
-            "Gemma and Qwen max_new_tokens is 64 by default; DeepSeek-OCR-2 uses its "
-            "remote-code value 8192. The budgets differ by necessity."
+            "Phase-1 and planned QA runs use the common 64-token ceiling for every model."
         ),
     }
     config.update(gemma.manifest_fields(args, processor_details, resolved_dtype))

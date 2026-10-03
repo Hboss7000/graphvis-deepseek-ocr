@@ -3,10 +3,11 @@ set -euo pipefail
 
 # Run this script inside tmux. All mutable artifacts belong on /workspace.
 readonly REPO_ROOT="${REPO_ROOT:-/workspace/bachelorArbeit}"
-readonly DATA_ROOT="${DATA_ROOT:-/workspace/data/inference50_corekeep}"
-readonly DEFAULT_RENDER_ROOT="${DEFAULT_RENDER_ROOT:-/workspace/data/inference50_corekeep_default_render}"
-readonly PROBE_ROOT="${PROBE_ROOT:-/workspace/data/inference50_reading_probe}"
-readonly RUN_ROOT="${RUN_ROOT:-/workspace/runs/inference50_reading_probe}"
+readonly OUTPUTS_ROOT="${OUTPUTS_ROOT:-${REPO_ROOT}/outputs}"
+readonly DATA_ROOT="${DATA_ROOT:-${OUTPUTS_ROOT}/inference50_2026-10-03_corekeep_budget18_e30_tb30}"
+readonly DEFAULT_RENDER_ROOT="${DEFAULT_RENDER_ROOT:-${OUTPUTS_ROOT}/inference50_2026-10-03_corekeep_budget18_e30_default_render}"
+readonly PROBE_ROOT="${PROBE_ROOT:-${OUTPUTS_ROOT}/phase1_reading_probe}"
+readonly RUN_ROOT="${RUN_ROOT:-${OUTPUTS_ROOT}/phase1_reading_probe/runs}"
 readonly LOG_DIR="${LOG_DIR:-/workspace/logs}"
 readonly LLAVA_PYTHON="${LLAVA_PYTHON:?Set LLAVA_PYTHON to the verified existing venv Python}"
 readonly QWEN_PYTHON="${QWEN_PYTHON:-/workspace/venvs/venv_qwen/bin/python}"
@@ -50,6 +51,7 @@ run_llava llava_tb30 "${DATA_ROOT}" "${RUN_ROOT}/llava_tb30"
   2>&1 | tee -a "${LOG_DIR}/qwen_tb30.log"
 
 "${QWEN_PYTHON}" "${REPO_ROOT}/scripts/report_inference50_reading_probe.py" \
+  --graph-metadata "${METADATA}" \
   --arm "llava_default_render=${RUN_ROOT}/llava_default_render/predictions_llava_node_description.jsonl" \
   --arm "llava_tb30=${RUN_ROOT}/llava_tb30/predictions_llava_node_description.jsonl" \
   --arm "qwen_tb30=${RUN_ROOT}/qwen_tb30/predictions_qwen_node_description.jsonl" \

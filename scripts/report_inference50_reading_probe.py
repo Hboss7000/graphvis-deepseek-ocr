@@ -12,12 +12,16 @@ ROOT = Path(__file__).resolve().parents[1]
 STAGE1 = ROOT / "experiments/2026-09-04_stage1_graph_comprehension_zero_shot/scripts"
 sys.path.insert(0, str(STAGE1))
 from score_stage1 import aggregate_task, read_jsonl  # noqa: E402
+from score_stage1 import normalize_component, parse_node_items  # noqa: E402
+from generate_graphvis_datasets import RELATION_TEXT  # noqa: E402
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--arm", action="append", required=True,
                         help="LABEL=predictions_node_description.jsonl")
+    parser.add_argument("--graph-metadata", type=Path, required=True,
+                        help="First-20 metadata used to identify visible relation labels.")
     parser.add_argument("--expected-count", type=int, default=20)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
@@ -26,6 +30,8 @@ def main() -> None:
         "interpretation": "Raw per-item gold-node recall for node_description.",
         "arms": {},
     }
+    metadata = {int(row["statement_idx"]): row
+                for row in read_jsonl(args.graph_metadata)}
     expected_indices = None
     for spec in args.arm:
         label, separator, raw_path = spec.partition("=")
@@ -43,11 +49,27 @@ def main() -> None:
         elif indices != expected_indices:
             raise ValueError(f"{label}: statement order differs from the first arm")
         metrics = aggregate_task("node_description", rows)
-        recall = metrics["set_metrics"]["raw"]["macro_recall"]
+        raw_metrics = metrics["set_metrics"]["raw"]
+        relation_labels = {
+            normalize_component(RELATION_TEXT.get(str(edge["relation"]), str(edge["relation"])), "basic")
+            for meta in (metadata[int(index)] for index in indices)
+            for edge in meta.get("edges", [])
+        }
+        predicted = [item for row in rows for item in parse_node_items(row.get("raw_response", ""))]
+        intrusions = sum(normalize_component(item, "basic") in relation_labels for item in predicted)
+        recall = raw_metrics["macro_recall"]
         report["arms"][label] = {
             "predictions": str(path.resolve()),
             "n": len(rows),
             "raw_macro_gold_node_recall": recall,
+            "raw_macro_precision": raw_metrics["macro_precision"],
+            "raw_macro_f1": raw_metrics["macro_f1"],
+            "edge_label_intrusion": {
+                "predicted_item_count": len(predicted),
+                "matching_predicted_item_count": intrusions,
+                "rate": intrusions / len(predicted) if predicted else 0.0,
+                "definition": "Predicted node items exactly equal to a rendered relation label after basic normalization.",
+            },
         }
     report["statement_indices"] = expected_indices
     payload = json.dumps(report, indent=2) + "\n"

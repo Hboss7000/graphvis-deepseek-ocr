@@ -17,8 +17,23 @@ from collections import defaultdict, deque
 from itertools import combinations
 import re
 from pathlib import Path
+import shutil
+import tempfile
 
 import graphviz
+
+try:
+    # Use the pinned inference library implementation whenever it is installed.
+    from transformers.models.llava_next.image_processing_llava_next import (
+        select_best_resolution as _transformers_select_best_resolution,
+    )
+except ImportError:  # Keep the CPU-only render environment lightweight.
+    _transformers_select_best_resolution = None
+
+try:
+    from llava_common import select_best_resolution as _compatible_select_best_resolution
+except ModuleNotFoundError:  # Tests may load this file as a module from the repo root.
+    from scripts.llava_common import select_best_resolution as _compatible_select_best_resolution
 
 
 RELATIONS = [
@@ -47,6 +62,31 @@ RELATION_TEXT = {
     'relatedto': 'related to',
     'usedfor': 'used for',
 }
+
+LLAVA_NEXT_GRID_PINPOINTS = (
+    (336, 672), (672, 336), (672, 672), (1008, 336), (336, 1008),
+)
+
+
+def llava_resolution_and_scale(image_size):
+    """Return LLaVA-NeXT's selected (height, width) grid and resize factor."""
+    width, height = image_size
+    selector = _transformers_select_best_resolution or _compatible_select_best_resolution
+    selected_height, selected_width = selector((height, width), LLAVA_NEXT_GRID_PINPOINTS)
+    return ((int(selected_height), int(selected_width)),
+            min(selected_width / width, selected_height / height))
+
+
+def wrap_node_label(label, max_chars=0):
+    """Insert one Graphviz line break at a word boundary without changing text."""
+    if max_chars <= 0 or len(label) <= max_chars or ' ' not in label:
+        return label
+    split_at = label.rfind(' ', 0, max_chars + 1)
+    if split_at <= 0:
+        split_at = label.find(' ', max_chars)
+    if split_at <= 0:
+        return label
+    return label[:split_at] + r'\n' + label[split_at + 1:]
 
 RELATION_PRIORITY = {
     'isa': 0, 'partof': 0, 'madeof': 0, 'usedfor': 0, 'capableof': 0,
@@ -308,6 +348,10 @@ def prune_graph(merged_nodes, merged_edges, max_nodes, max_edges, max_degree, *,
         raise ValueError(f'Unknown core policy: {core_policy}')
     if max_bridges < 0:
         raise ValueError('Require max_bridges >= 0')
+    # The legacy/truncate policy keeps its historical meaning: zero disables
+    # the node cap.  Under keep, max_nodes is a total budget for core plus
+    # bridges.  Core is an invariant, so a core larger than the budget is kept
+    # intact and simply leaves no room for bridges.
     node_budget = (max_nodes or None) if core_policy == 'truncate' else None
     edge_budget = max_edges or None
     neighbors = defaultdict(set)
@@ -352,7 +396,10 @@ def prune_graph(merged_nodes, merged_edges, max_nodes, max_edges, max_degree, *,
         bridges.sort(key=lambda cid: (-len(neighbors[cid] & core), -len(neighbors[cid]), cid))
     else:
         bridges.sort(key=lambda cid: (-len(neighbors[cid] & core), cid))
-    if node_budget is not None:
+    if core_policy == 'keep':
+        bridge_budget = max(0, max_nodes - len(core))
+        bridges = bridges[:bridge_budget]
+    elif node_budget is not None:
         bridges = bridges[:max(0, node_budget - len(keep))]
     if max_bridges > 0:
         bridges = bridges[:max_bridges]
@@ -437,8 +484,9 @@ def prune_graph(merged_nodes, merged_edges, max_nodes, max_edges, max_degree, *,
                'bridges_added': len(bridges),
                'edges_before_truncation': edges_before_truncation, 'edges_after': len(edges)}
     if core_policy != 'truncate' or max_bridges != 0:
-        pruning.update(core_policy=core_policy, max_bridges=max_bridges,
-                       max_nodes_ignored=core_policy == 'keep')
+        pruning.update(core_policy=core_policy, max_bridges=max_bridges)
+        if core_policy == 'keep':
+            pruning['bridge_budget'] = bridge_budget
 
     return {
         'connected_nodes': sorted(connected_keep),
@@ -452,23 +500,23 @@ def prune_graph(merged_nodes, merged_edges, max_nodes, max_edges, max_degree, *,
     }
 
 
-def node_style(cid, merged_nodes, correct_label, reveal_correct_answer=False):
+def node_style(cid, merged_nodes, correct_label, reveal_correct_answer=False, wrap_labels=0):
     info = merged_nodes[cid]
     if info['in_question']:
-        return label_for_node(info['name']), '#ADD8E6', '1.5'
+        return wrap_node_label(label_for_node(info['name']), wrap_labels), '#ADD8E6', '1.5'
     if info['in_choices']:
         is_correct = reveal_correct_answer and correct_label in info['in_choices']
         fill = '#90EE90' if is_correct else '#E0E0E0'
         penwidth = '3' if is_correct else '1.5'
-        return label_for_node(info['name']), fill, penwidth
-    return label_for_node(info['name']), 'white', '1.5'
+        return wrap_node_label(label_for_node(info['name']), wrap_labels), fill, penwidth
+    return wrap_node_label(label_for_node(info['name']), wrap_labels), 'white', '1.5'
 
 
 def render_graph(
     image_stem, merged_nodes, graph, correct_label, engine, hide_relatedto_labels,
     reveal_correct_answer=False, dpi=200, disconnected_rows=3,
     node_fontsize=18, edge_fontsize=14, nodesep=0.5, ranksep=0.7,
-    graph_size=None, graph_ratio=None, rankdir="LR",
+    graph_size=None, graph_ratio=None, rankdir="LR", wrap_labels=0,
 ):
     dot = graphviz.Digraph(format='png', engine=engine)
     graph_attrs = {
@@ -500,7 +548,7 @@ def render_graph(
     dot.attr('edge', fontname='Helvetica', fontsize=str(edge_fontsize), arrowsize='0.8', penwidth='1.2')
 
     for cid in graph['connected_nodes']:
-        label, fill, penwidth = node_style(cid, merged_nodes, correct_label, reveal_correct_answer)
+        label, fill, penwidth = node_style(cid, merged_nodes, correct_label, reveal_correct_answer, wrap_labels)
         dot.node(str(cid), label=label, fillcolor=fill, penwidth=penwidth)
 
     if graph['disconnected_answers']:
@@ -525,7 +573,7 @@ def render_graph(
                 with sub.subgraph() as col:
                     col.attr(rank='same')
                     for cid in column:
-                        label, fill, penwidth = node_style(cid, merged_nodes, correct_label, reveal_correct_answer)
+                        label, fill, penwidth = node_style(cid, merged_nodes, correct_label, reveal_correct_answer, wrap_labels)
                         col.node(str(cid), label=label, fillcolor=fill, penwidth=penwidth, style='rounded,filled,dashed')
                 anchor = column[0]
                 if prev_anchor is not None:
@@ -612,6 +660,7 @@ def build_stage1_records(
             'task_type': 'node_degree',
             'prompt': rng.choice(NODE_DEGREE_PROMPTS).format(node=name),
             'answer': f'The degree of the node "{name}" is {degree[chosen]}.',
+            'target_node': name,
         })
 
     if stage1_task_set == "extended":
@@ -635,6 +684,7 @@ def build_stage1_records(
             'prompt': item['prompt'],
             'answer': item['answer'],
             **({'gold': item['gold']} if 'gold' in item else {}),
+            **({'target_node': item['target_node']} if 'target_node' in item else {}),
             'source': 'graphvis_stage1_clean_union_of_four',
         })
     return records
@@ -659,8 +709,8 @@ def build_stage2_record(image_path, split, statement_idx, statement):
     }
 
 
-def graph_metadata(statement_idx, statement, merged_nodes, graph, image_path):
-    return {
+def graph_metadata(statement_idx, statement, merged_nodes, graph, image_path, render_metadata=None):
+    result = {
         'statement_idx': statement_idx,
         'question': statement['question']['stem'],
         'answerKey': statement['answerKey'],
@@ -692,6 +742,46 @@ def graph_metadata(statement_idx, statement, merged_nodes, graph, image_path):
         **({'pruning': dict(graph['pruning'])} if 'pruning' in graph else {}),
         'aggregation_note': 'Union of four QA-GNN answer-choice graphs; this is an implementation interpretation, not directly specified by GraphVis.',
     }
+    if render_metadata:
+        result.update(render_metadata)
+    return result
+
+
+def render_selected_orientation(
+    image_stem, merged_nodes, graph, correct_label, engine, hide_relatedto_labels,
+    reveal_correct_answer, dpi, disconnected_rows, node_fontsize, edge_fontsize,
+    nodesep, ranksep, graph_size, graph_ratio, rankdir, auto_orient, wrap_labels,
+):
+    common = (merged_nodes, graph, correct_label, engine, hide_relatedto_labels)
+    options = dict(reveal_correct_answer=reveal_correct_answer, dpi=dpi,
+                   disconnected_rows=disconnected_rows, node_fontsize=node_fontsize,
+                   edge_fontsize=edge_fontsize, nodesep=nodesep, ranksep=ranksep,
+                   graph_size=graph_size, graph_ratio=graph_ratio, wrap_labels=wrap_labels)
+    if auto_orient == 'off':
+        path = render_graph(image_stem, *common, rankdir=rankdir, **options)
+        return path, None
+
+    from PIL import Image
+    image_stem.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='.llava-orient-', dir=image_stem.parent) as temp_dir:
+        temp_dir = Path(temp_dir)
+        candidates = {}
+        for direction in ('LR', 'TB'):
+            candidate_stem = temp_dir / direction.lower()
+            candidate_path = render_graph(candidate_stem, *common, rankdir=direction, **options)
+            with Image.open(candidate_path) as opened:
+                grid, scale = llava_resolution_and_scale(opened.size)
+            candidates[direction] = (candidate_path, scale, grid)
+        selected = 'TB' if candidates['TB'][1] >= candidates['LR'][1] else 'LR'
+        selected_path, selected_scale, selected_grid = candidates[selected]
+        final_path = image_stem.with_suffix('.png')
+        shutil.copyfile(selected_path, final_path)
+    return final_path, {'rankdir_selected': selected,
+                        'llava_scale_factor': selected_scale,
+                        'llava_selected_grid': {'height': selected_grid[0],
+                                                'width': selected_grid[1]},
+                        'auto_orient_scales': {'LR': candidates['LR'][1],
+                                               'TB': candidates['TB'][1]}}
 
 
 def write_jsonl(path, records):
@@ -755,7 +845,7 @@ def parse_args():
     parser.add_argument('--core-policy', choices=['truncate', 'keep'], default='truncate',
                         help='Whether max-nodes may truncate question/answer core concepts.')
     parser.add_argument('--max-bridges', type=int, default=0,
-                        help='Independent bridge-node cap; 0 disables it.')
+                        help='Optional independent bridge-node cap; 0 disables it.')
     parser.add_argument('--bridge-rule', choices=['qa-bridge', 'core-neighbor', 'any', 'none'],
                         default='qa-bridge', help='Eligibility rule for filler nodes.')
     parser.add_argument('--no-lifelines', dest='lifelines', action='store_false',
@@ -768,6 +858,10 @@ def parse_args():
     parser.add_argument('--graph-size')
     parser.add_argument('--graph-ratio')
     parser.add_argument('--rankdir', choices=['LR', 'TB'], default='LR')
+    parser.add_argument('--auto-orient', choices=['off', 'llava'], default='off',
+                        help='Render LR and TB candidates and select the larger LLaVA resize factor.')
+    parser.add_argument('--wrap-labels', type=int, default=0,
+                        help='Wrap long visible node labels in images only; 0 disables wrapping.')
     parser.add_argument('--dpi', type=int, default=200, help='Rendered PNG resolution.')
     parser.add_argument(
         '--disconnected-rows', type=int, default=3,
@@ -792,9 +886,10 @@ def parse_args():
 def main():
     args = parse_args()
     if (args.max_degree < 0 or args.max_nodes < 0 or args.max_edges < 0
-            or args.max_bridges < 0):
+            or args.max_bridges < 0 or args.wrap_labels < 0):
         raise ValueError(
-            'Require max_degree >= 0, max_nodes >= 0, max_edges >= 0 and max_bridges >= 0'
+            'Require max_degree >= 0, max_nodes >= 0, max_edges >= 0, '
+            'max_bridges >= 0, and wrap_labels >= 0'
         )
     rng = random.Random(args.seed)
 
@@ -847,11 +942,11 @@ def main():
                             bridge_rule=args.bridge_rule, lifelines=args.lifelines,
                             core_policy=args.core_policy, max_bridges=args.max_bridges)
         image_stem = image_dir / f'q{statement_idx:05d}_clean'
-        image_path = render_graph(
+        image_path, render_metadata = render_selected_orientation(
             image_stem, merged_nodes, graph, correct_label, args.engine, args.hide_relatedto_labels,
             args.reveal_correct_answer, args.dpi, args.disconnected_rows,
             args.node_fontsize, args.edge_fontsize, args.nodesep, args.ranksep,
-            args.graph_size, args.graph_ratio, args.rankdir,
+            args.graph_size, args.graph_ratio, args.rankdir, args.auto_orient, args.wrap_labels,
         )
         rel_image_path = image_path.relative_to(args.out_dir)
 
@@ -862,7 +957,8 @@ def main():
             )
         )
         stage2_records.append(build_stage2_record(rel_image_path, args.split, statement_idx, statement))
-        metadata = graph_metadata(statement_idx, statement, merged_nodes, graph, rel_image_path)
+        metadata = graph_metadata(statement_idx, statement, merged_nodes, graph, rel_image_path,
+                                  render_metadata=render_metadata)
         metadata_records.append(metadata)
         write_jsonl(graph_dir / f'q{statement_idx:05d}.jsonl', [metadata])
 

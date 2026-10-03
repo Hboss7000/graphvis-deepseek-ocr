@@ -4,8 +4,9 @@ set -Eeuo pipefail
 
 readonly WORKSPACE=/workspace
 readonly REPO_ROOT=/workspace/bachelorArbeit
-readonly DRY_ROOT="${WORKSPACE}/outputs/phase1_dryrun"
-readonly PROBE_ROOT="${WORKSPACE}/outputs/phase1_reading_probe"
+readonly OUTPUTS_ROOT="${REPO_ROOT}/outputs"
+readonly DRY_ROOT="${OUTPUTS_ROOT}/phase1_dryrun"
+readonly PROBE_ROOT="${OUTPUTS_ROOT}/phase1_reading_probe"
 readonly LOG_ROOT="${WORKSPACE}/logs/phase1"
 readonly PYTHON="${WORKSPACE}/venvs/venv_qwen/bin/python"
 
@@ -91,7 +92,7 @@ for name, (root, label) in jobs.items():
                          ('parse_tier' not in row and not str(row.get('raw_response', '')).strip())
                          for row in rows)
     exit_code = run['exit_code'] if run else 'n/a'
-    print(f'| {name} | {len(rows)} | {timing_text} | {peak_text} | {ceilings} | {parse_failures} | {exit_code} |')
+print(f'| {name} | {len(rows)} | {timing_text} | {peak_text} | {ceilings} | {parse_failures} | {exit_code} |')
     # The full split has 50 question graphs: 450 extended Stage-1 records and
     # 50 QA records. For timed runners, retain one model-load wall cost and
     # scale only subsequent item generation. For Gemma's wall-only fallback,
@@ -101,7 +102,26 @@ for name, (root, label) in jobs.items():
         if timing and run:
             total_projected_seconds += float(run['wall_seconds']) + seconds_per_item * (target - len(rows))
         else:
-            total_projected_seconds += seconds_per_item * target
+        total_projected_seconds += seconds_per_item * target
+
+print('\nRecorded effective max_new_tokens from each runner config:')
+for name, (root, _label) in jobs.items():
+    path = root / 'run_config.json'
+    if not path.is_file():
+        candidates = sorted(root.glob('*/run_config.json')) if root.is_dir() else []
+        path = candidates[0] if candidates else path
+    if not path.is_file():
+        print(f'  {name}: missing run_config.json')
+        continue
+    config = json.loads(path.read_text())
+    effective = config.get('effective_max_new_tokens')
+    if effective is None:
+        effective = config.get('generation', {}).get('max_new_tokens')
+    if effective is None:
+        effective = config.get('max_new_tokens')
+    expected = 1024 if 'Stage 1' in name else 64
+    state = 'OK' if effective == expected else f'EXPECTED {expected}'
+    print(f'  {name}: {effective} ({state}) — {path}')
 
 report = probe / 'runs/reading_probe_report.json'
 print('\nReading-probe raw macro gold-node recall:')

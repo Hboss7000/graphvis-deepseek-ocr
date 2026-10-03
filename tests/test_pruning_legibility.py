@@ -115,6 +115,42 @@ def test_render_flags_only_change_attributes(tmp_path, monkeypatch):
     assert json.dumps(graph, sort_keys=True) == before
 
 
+def test_wrap_labels_changes_image_label_only_at_word_boundary():
+    assert gen.wrap_node_label('jewelry box organizer', 14) == 'jewelry box\\norganizer'
+    assert gen.wrap_node_label('short label', 14) == 'short label'
+    assert gen.wrap_node_label('extraordinarilylongtoken', 8) == 'extraordinarilylongtoken'
+
+
+def test_auto_orient_is_deterministic_and_prefers_tb_on_tie(tmp_path, monkeypatch):
+    from PIL import Image as PILImage
+
+    sizes = {'LR': (1800, 700), 'TB': (700, 1800)}
+
+    def fake_render(stem, *args, rankdir='LR', **kwargs):
+        path = Path(stem).with_suffix('.png')
+        PILImage.new('RGB', sizes[rankdir], 'white').save(path)
+        return path
+
+    monkeypatch.setattr(gen, 'render_graph', fake_render)
+    args = ({}, {'connected_nodes': [], 'disconnected_answers': [], 'edges': []}, 'A',
+            'dot', False, False, 200, 3, 30, 24, 0.5, 0.4, None, None, 'TB', 'llava', 0)
+    path1, meta1 = gen.render_selected_orientation(tmp_path / 'first', *args)
+    path2, meta2 = gen.render_selected_orientation(tmp_path / 'second', *args)
+    assert meta1 == meta2
+    assert meta1['rankdir_selected'] == 'TB'
+    assert path1.read_bytes() == path2.read_bytes()
+
+
+def test_render_options_do_not_change_stage1_records():
+    nodes, edges = hub_graph()
+    graph = gen.prune_graph(nodes, edges, 18, 60, 0)
+    baseline = gen.build_stage1_records('test/images/q.png', 'test', 7, nodes, graph,
+                                        random.Random(13), None, 'extended', 'per-task')
+    rerendered = gen.build_stage1_records('test/images/q.png', 'test', 7, nodes, graph,
+                                          random.Random(13), None, 'extended', 'per-task')
+    assert json.dumps(baseline, ensure_ascii=False) == json.dumps(rerendered, ensure_ascii=False)
+
+
 def test_stats_node_and_option_denominators():
     meta = {'visible_nodes': [
         {'cid': 0, 'in_question': True, 'in_choices': []},
@@ -245,7 +281,7 @@ def test_core_retention_metadata(budget, truncated, size):
     assert graph['pruning']['max_nodes'] == budget
 
 
-def test_keep_core_policy_never_drops_core_and_records_ignored_node_cap():
+def test_keep_core_policy_never_drops_core_when_core_exceeds_total_budget():
     nodes = {i: {'name': str(i), 'in_question': i < 20,
                  'in_choices': {'A'} if i >= 20 else set()} for i in range(27)}
     keep, graph = capture_keep(
@@ -256,18 +292,30 @@ def test_keep_core_policy_never_drops_core_and_records_ignored_node_cap():
     assert graph['pruning']['core_truncated'] is False
     assert graph['pruning']['core_policy'] == 'keep'
     assert graph['pruning']['max_nodes'] == 3
-    assert graph['pruning']['max_nodes_ignored'] is True
+    assert graph['pruning']['bridge_budget'] == 0
+    assert 'max_nodes_ignored' not in graph['pruning']
 
 
-def test_keep_core_policy_limits_bridges_after_existing_ranking():
+def test_keep_core_policy_uses_remaining_total_budget_then_optional_bridge_cap():
     nodes, edges = hub_graph()
     keep, graph = capture_keep(
-        nodes, edges, 2, 0, 0, core_policy='keep', max_bridges=4
+        nodes, edges, 6, 0, 0, core_policy='keep', max_bridges=4
     )
     assert {0, 10} <= keep
     assert len(keep - {0, 10}) == 4
     assert graph['pruning']['bridges_added'] == 4
     assert graph['pruning']['max_bridges'] == 4
+    assert graph['pruning']['bridge_budget'] == 4
+
+
+def test_keep_core_policy_total_budget_fills_only_remaining_slots():
+    nodes, edges = hub_graph()
+    keep, graph = capture_keep(nodes, edges, 5, 0, 0, core_policy='keep')
+    core = {0, 10}
+    assert core <= keep
+    assert len(keep) == len(core) + min(9, max(0, 5 - len(core)))
+    assert graph['pruning']['bridges_added'] == 3
+    assert graph['pruning']['bridge_budget'] == 3
 
 
 def test_explicit_default_core_policy_is_byte_identical():

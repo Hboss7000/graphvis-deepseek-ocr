@@ -43,23 +43,34 @@ def test_probe_report_uses_raw_macro_node_recall_and_paired_indices(tmp_path):
         "answer": "The image depicts the following nodes: alpha, beta.",
     }
     arms = {}
-    for label, response in (("perfect", record["answer"]), ("half", "alpha"), ("repeat", record["answer"])):
+    for label, response in (("perfect", record["answer"]), ("half", "alpha"),
+                            ("repeat", record["answer"]), ("intrusion", "alpha, part of")):
         rows = []
         for index in (3, 7):
             row = {"statement_idx": index, "task_type": "node_description",
-                   "hit_token_ceiling": False}
+                   "hit_token_ceiling": False, "raw_response": response}
             row.update(score_record(record, response, {}))
             rows.append(row)
         path = tmp_path / f"{label}.jsonl"
         dump(path, rows)
         arms[label] = path
+    metadata = tmp_path / "graph_metadata.jsonl"
+    dump(metadata, [
+        {"statement_idx": index, "edges": [
+            {"source_cid": 1, "target_cid": 2, "relation": "partof"}]}
+        for index in (3, 7)
+    ])
     output = tmp_path / "report.json"
     command = [sys.executable, str(ROOT / "scripts/report_inference50_reading_probe.py")]
     for label, path in arms.items():
         command += ["--arm", f"{label}={path}"]
-    command += ["--expected-count", "2", "--output", str(output)]
+    command += ["--graph-metadata", str(metadata), "--expected-count", "2", "--output", str(output)]
     subprocess.run(command, check=True, capture_output=True)
     report = json.loads(output.read_text())
     assert report["arms"]["perfect"]["raw_macro_gold_node_recall"] == 1.0
     assert report["arms"]["half"]["raw_macro_gold_node_recall"] == 0.5
+    assert report["arms"]["perfect"]["raw_macro_precision"] == 1.0
+    assert report["arms"]["perfect"]["raw_macro_f1"] == 1.0
+    assert report["arms"]["perfect"]["edge_label_intrusion"]["rate"] == 0.0
+    assert report["arms"]["intrusion"]["edge_label_intrusion"]["rate"] == 0.5
     assert report["statement_indices"] == [3, 7]

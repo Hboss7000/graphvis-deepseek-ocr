@@ -391,6 +391,7 @@ def write_run_config(
             "visible_nodes with connected=false are drawn in the image condition "
             "but omitted from kg_text because they produce no triples"
         ),
+        "effective_max_new_tokens": args.max_new_tokens,
         "transformers_version": transformers_version,
         "min_pixels": args.min_pixels,
         "max_pixels": args.max_pixels,
@@ -406,8 +407,7 @@ def write_run_config(
             "DeepSeek-OCR-2 base_size=1024, image_size=768, crop_mode=True"
         ),
         "decoding_budget_note": (
-            "Qwen max_new_tokens is 64 by default; DeepSeek-OCR-2 uses its "
-            "remote-code value 8192. The budgets differ by necessity."
+            "Phase-1 and planned QA runs use the common 64-token ceiling for every model."
         ),
     }
     config_path = args.output_jsonl.parent / "run_config.json"

@@ -100,8 +100,9 @@ def summarize(rows):
                 config.update(
                     core_policy=pruning.get('core_policy', 'truncate'),
                     max_bridges=pruning.get('max_bridges', 0),
-                    max_nodes_ignored=pruning.get('max_nodes_ignored', False),
                 )
+                if 'bridge_budget' in pruning:
+                    config['bridge_budget'] = pruning['bridge_budget']
             configs[json.dumps(config, sort_keys=True)] += 1
 
     def node_summary(items):

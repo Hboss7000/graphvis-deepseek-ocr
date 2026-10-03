@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Manual, single-GPU phase-1 runner.  Run this *on the existing pod* only.
 # It creates no RunPod resources and never stops or terminates a pod.
+# The pod repository must be a clean `git clone` of branch inference50-core-keep.
 #
 # Launch (from the pod):
 #   tmux new-session -d -s phase1 'cd /workspace/bachelorArbeit && bash scripts/phase1_manual.sh'
@@ -13,13 +14,16 @@ set -u -o pipefail
 
 readonly WORKSPACE=/workspace
 readonly REPO_ROOT=/workspace/bachelorArbeit
-readonly SPLIT_ROOT="${WORKSPACE}/outputs/inference50_2026-10-03_corekeep_budget18_e30_tb30"
-readonly DEFAULT_RENDER_ROOT="${WORKSPACE}/outputs/inference50_2026-10-03_corekeep_budget18_e30_default_render"
+readonly OUTPUTS_ROOT="${REPO_ROOT}/outputs"
+readonly STAGE1_TOKEN_LIMIT=1024
+readonly QA_TOKEN_LIMIT=64
+readonly SPLIT_ROOT="${OUTPUTS_ROOT}/inference50_2026-10-03_corekeep_budget18_e30_tb30"
+readonly DEFAULT_RENDER_ROOT="${OUTPUTS_ROOT}/inference50_2026-10-03_corekeep_budget18_e30_default_render"
 readonly SPLIT=test
 readonly TEST_ROOT="${SPLIT_ROOT}/${SPLIT}"
 readonly DEFAULT_TEST_ROOT="${DEFAULT_RENDER_ROOT}/${SPLIT}"
-readonly DRY_ROOT="${WORKSPACE}/outputs/phase1_dryrun"
-readonly PROBE_ROOT="${WORKSPACE}/outputs/phase1_reading_probe"
+readonly DRY_ROOT="${OUTPUTS_ROOT}/phase1_dryrun"
+readonly PROBE_ROOT="${OUTPUTS_ROOT}/phase1_reading_probe"
 readonly LOG_ROOT="${WORKSPACE}/logs/phase1"
 readonly STATUS_ROOT="${DRY_ROOT}/status"
 readonly OCR2_PYTHON="${WORKSPACE}/venvs/venv_ocr2/bin/python"
@@ -153,7 +157,7 @@ PY
   if (( exit_code != 0 )); then
     echo "FAILED (${exit_code}); continuing to the next sequential job. See ${log}" >&2
   else
-    echo "completed; see ${log}"
+  echo "COMPLETED; see ${log}"
   fi
   return 0
 }
@@ -167,11 +171,12 @@ readonly STAGE1_RUNNERS="${REPO_ROOT}/experiments/2026-09-04_stage1_graph_compre
 readonly QA_RUNNERS="${REPO_ROOT}/experiments/2026-08-25_zero_shot_obqa_500_multimodal/scripts"
 
 # Stage 1: eight question graphs / 72 records, normal extended-task inference.
+echo "Effective token limits: DeepSeek Stage 1=${STAGE1_TOKEN_LIMIT}; Qwen Stage 1=${STAGE1_TOKEN_LIMIT}; LLaVA Stage 1=${STAGE1_TOKEN_LIMIT}; Gemma Stage 1=${STAGE1_TOKEN_LIMIT}; DeepSeek QA=${QA_TOKEN_LIMIT}; Qwen QA=${QA_TOKEN_LIMIT}; LLaVA QA=${QA_TOKEN_LIMIT}; Gemma QA=${QA_TOKEN_LIMIT}."
 run_job deepseek_stage1_8g "${OCR2_PYTHON}" "${STAGE1_RUNNERS}/run_stage1_deepseek.py" \
   --model-id "${DEEPSEEK_ID}" --revision "${DEEPSEEK_REV}" \
   --input-jsonl "${DRY_STAGE1}" --graph-metadata "${DRY_METADATA}" --image-root "${SPLIT_ROOT}" \
   --output-dir "${DRY_ROOT}/runs/deepseek_stage1" --expected-count 72 --expected-split test \
-  --task-set extended --answer-format none --prompt-variant standard --seed 13 --max-new-tokens 8192 \
+  --task-set extended --answer-format none --prompt-variant standard --seed 13 --max-new-tokens "${STAGE1_TOKEN_LIMIT}" \
   --approve-prompts --resume
 
 run_job qwen_stage1_8g "${QWEN_PYTHON}" "${STAGE1_RUNNERS}/run_stage1_qwen.py" \
@@ -179,20 +184,20 @@ run_job qwen_stage1_8g "${QWEN_PYTHON}" "${STAGE1_RUNNERS}/run_stage1_qwen.py" \
   --input-jsonl "${DRY_STAGE1}" --graph-metadata "${DRY_METADATA}" --image-root "${SPLIT_ROOT}" \
   --output-dir "${DRY_ROOT}/runs/qwen_stage1" --expected-count 72 --expected-split test \
   --task-set extended --answer-format none --min-pixels 262144 --max-pixels 1310720 \
-  --max-new-tokens 1024 --seed 13 --approve-prompts --resume
+  --max-new-tokens "${STAGE1_TOKEN_LIMIT}" --seed 13 --approve-prompts --resume
 
 run_job llava_stage1_8g "${LLAVA_PYTHON}" "${STAGE1_RUNNERS}/run_stage1_llava.py" \
   --model-id "${LLAVA_ID}" --revision "${LLAVA_REV}" \
   --input-jsonl "${DRY_STAGE1}" --graph-metadata "${DRY_METADATA}" --image-root "${SPLIT_ROOT}" \
   --output-dir "${DRY_ROOT}/runs/llava_stage1" --expected-count 72 --expected-split test \
-  --task-set extended --answer-format none --max-new-tokens 1024 --seed 13 --approve-prompts --resume
+  --task-set extended --answer-format none --max-new-tokens "${STAGE1_TOKEN_LIMIT}" --seed 13 --approve-prompts --resume
 
 # Gemma's own runner requires this double-crop legibility gate before image inference.
 run_job gemma_stage1_preflight_8g "${QWEN_PYTHON}" scripts/eval_gemma3_stage1.py \
   --model-id "${GEMMA_ID}" --revision "${GEMMA_REV}" \
   --input-jsonl "${DRY_STAGE1}" --graph-metadata "${DRY_METADATA}" --image-root "${SPLIT_ROOT}" \
   --output-dir "${DRY_ROOT}/runs/gemma_stage1_preflight" --expected-count 72 --expected-split test \
-  --task-set extended --answer-format none --max-new-tokens 1024 --attn-impl eager --pan-and-scan \
+  --task-set extended --answer-format none --max-new-tokens "${STAGE1_TOKEN_LIMIT}" --attn-impl eager --pan-and-scan \
   --pan-and-scan-min-crop-size 256 --pan-and-scan-max-num-crops 4 \
   --pan-and-scan-min-ratio-to-activate 1.2 --cache-implementation dynamic --batch-size 1 --seed 13 \
   --preflight 8 --preflight-min-recall 0.95 --approve-prompts --resume
@@ -201,7 +206,7 @@ run_job gemma_stage1_8g "${QWEN_PYTHON}" scripts/eval_gemma3_stage1.py \
   --model-id "${GEMMA_ID}" --revision "${GEMMA_REV}" \
   --input-jsonl "${DRY_STAGE1}" --graph-metadata "${DRY_METADATA}" --image-root "${SPLIT_ROOT}" \
   --output-dir "${DRY_ROOT}/runs/gemma_stage1" --expected-count 72 --expected-split test \
-  --task-set extended --answer-format none --max-new-tokens 1024 --attn-impl eager --pan-and-scan \
+  --task-set extended --answer-format none --max-new-tokens "${STAGE1_TOKEN_LIMIT}" --attn-impl eager --pan-and-scan \
   --pan-and-scan-min-crop-size 256 --pan-and-scan-max-num-crops 4 \
   --pan-and-scan-min-ratio-to-activate 1.2 --cache-implementation dynamic --batch-size 1 --seed 13 \
   --preflight-report "${DRY_ROOT}/runs/gemma_stage1_preflight/preflight_report.json" --approve-prompts --resume
@@ -212,25 +217,25 @@ run_job deepseek_qa_8g "${OCR2_PYTHON}" "${QA_RUNNERS}/run_zero_shot.py" \
   --graph-metadata "${DRY_METADATA}" --image-root "${SPLIT_ROOT}" \
   --output-jsonl "${DRY_ROOT}/runs/deepseek_qa/predictions.jsonl" \
   --infer-output-dir "${DRY_ROOT}/runs/deepseek_qa/infer" --condition image --expected-count 8 \
-  --max-new-tokens 8192 --approve-prompt-diff --resume
+  --max-new-tokens "${QA_TOKEN_LIMIT}" --approve-prompt-diff --resume
 
 run_job qwen_qa_8g "${QWEN_PYTHON}" "${QA_RUNNERS}/run_zero_shot_qwen.py" \
   --model-id "${QWEN_ID}" --revision "${QWEN_REV}" --input-jsonl "${DRY_STAGE2}" \
   --graph-metadata "${DRY_METADATA}" --image-root "${SPLIT_ROOT}" \
   --output-jsonl "${DRY_ROOT}/runs/qwen_qa/predictions.jsonl" --condition image --expected-count 8 \
-  --min-pixels 262144 --max-pixels 1310720 --max-new-tokens 64 --approve-prompt-diff --resume
+  --min-pixels 262144 --max-pixels 1310720 --max-new-tokens "${QA_TOKEN_LIMIT}" --approve-prompt-diff --resume
 
 run_job llava_qa_8g "${LLAVA_PYTHON}" "${QA_RUNNERS}/run_zero_shot_llava.py" \
   --model-id "${LLAVA_ID}" --revision "${LLAVA_REV}" --input-jsonl "${DRY_STAGE2}" \
   --graph-metadata "${DRY_METADATA}" --image-root "${SPLIT_ROOT}" \
   --output-jsonl "${DRY_ROOT}/runs/llava_qa/predictions.jsonl" --condition image --expected-count 8 \
-  --max-new-tokens 64 --seed 13 --approve-prompt-diff --resume
+  --max-new-tokens "${QA_TOKEN_LIMIT}" --seed 13 --approve-prompt-diff --resume
 
 run_job gemma_qa_8g "${QWEN_PYTHON}" scripts/eval_gemma3_stage2.py \
   --model-id "${GEMMA_ID}" --revision "${GEMMA_REV}" --input-jsonl "${DRY_STAGE2}" \
   --graph-metadata "${DRY_METADATA}" --image-root "${SPLIT_ROOT}" \
   --output-jsonl "${DRY_ROOT}/runs/gemma_qa/predictions.jsonl" --condition image --expected-count 8 \
-  --max-new-tokens 64 --attn-impl eager --pan-and-scan --pan-and-scan-min-crop-size 256 \
+  --max-new-tokens "${QA_TOKEN_LIMIT}" --attn-impl eager --pan-and-scan --pan-and-scan-min-crop-size 256 \
   --pan-and-scan-max-num-crops 4 --pan-and-scan-min-ratio-to-activate 1.2 \
   --cache-implementation dynamic --batch-size 1 --seed 13 \
   --preflight-report "${DRY_ROOT}/runs/gemma_stage1_preflight/preflight_report.json" \
@@ -258,6 +263,7 @@ run_job probe_qwen_tb30 "${QWEN_PYTHON}" "${STAGE1_RUNNERS}/run_stage1_qwen.py" 
   --max-new-tokens 1024 --seed 13 --behavior-only --approve-prompts --resume
 
 run_job probe_report "${QWEN_PYTHON}" scripts/report_inference50_reading_probe.py \
+  --graph-metadata "${PROBE_METADATA}" \
   --arm "llava_default_render=${PROBE_ROOT}/runs/llava_default_render/predictions_llava_node_description.jsonl" \
   --arm "llava_tb30=${PROBE_ROOT}/runs/llava_tb30/predictions_llava_node_description.jsonl" \
   --arm "qwen_tb30=${PROBE_ROOT}/runs/qwen_tb30/predictions_qwen_node_description.jsonl" \
