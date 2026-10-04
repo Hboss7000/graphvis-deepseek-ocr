@@ -500,8 +500,11 @@ def prune_graph(merged_nodes, merged_edges, max_nodes, max_edges, max_degree, *,
     }
 
 
-def node_style(cid, merged_nodes, correct_label, reveal_correct_answer=False, wrap_labels=0):
+def node_style(cid, merged_nodes, correct_label, reveal_correct_answer=False, wrap_labels=0,
+               style_mode='legacy'):
     info = merged_nodes[cid]
+    if style_mode == 'uniform':
+        return wrap_node_label(label_for_node(info['name']), wrap_labels), '#ADD8E6', '1.5'
     if info['in_question']:
         return wrap_node_label(label_for_node(info['name']), wrap_labels), '#ADD8E6', '1.5'
     if info['in_choices']:
@@ -518,7 +521,12 @@ def render_graph(
     node_fontsize=18, edge_fontsize=14, nodesep=0.5, ranksep=0.7,
     graph_size=None, graph_ratio=None, rankdir="LR", wrap_labels=0,
     edge_label_style='plain',
+    node_style_mode='legacy',
 ):
+    if node_style_mode not in ('legacy', 'uniform'):
+        raise ValueError(f'Unknown node style: {node_style_mode}')
+    if node_style_mode == 'uniform' and reveal_correct_answer:
+        raise ValueError('Uniform node style cannot reveal the correct answer')
     dot = graphviz.Digraph(format='png', engine=engine)
     graph_attrs = {
         'overlap': 'false',
@@ -549,8 +557,9 @@ def render_graph(
     dot.attr('edge', fontname='Helvetica', fontsize=str(edge_fontsize), arrowsize='0.8', penwidth='1.2')
 
     for cid in graph['connected_nodes']:
-        label, fill, penwidth = node_style(cid, merged_nodes, correct_label, reveal_correct_answer, wrap_labels)
-        dot.node(str(cid), label=label, fillcolor=fill, penwidth=penwidth)
+        label, fill, penwidth = node_style(cid, merged_nodes, correct_label, reveal_correct_answer, wrap_labels, node_style_mode)
+        uniform = {'color': 'black', 'style': 'rounded,filled,solid'} if node_style_mode == 'uniform' else {}
+        dot.node(str(cid), label=label, fillcolor=fill, penwidth=penwidth, **uniform)
 
     if graph['disconnected_answers']:
         with dot.subgraph(name='cluster_no_evidence') as sub:
@@ -574,8 +583,10 @@ def render_graph(
                 with sub.subgraph() as col:
                     col.attr(rank='same')
                     for cid in column:
-                        label, fill, penwidth = node_style(cid, merged_nodes, correct_label, reveal_correct_answer, wrap_labels)
-                        col.node(str(cid), label=label, fillcolor=fill, penwidth=penwidth, style='rounded,filled,dashed')
+                        label, fill, penwidth = node_style(cid, merged_nodes, correct_label, reveal_correct_answer, wrap_labels, node_style_mode)
+                        isolated_style = ({'color': 'black', 'style': 'rounded,filled,solid'}
+                                          if node_style_mode == 'uniform' else {'style': 'rounded,filled,dashed'})
+                        col.node(str(cid), label=label, fillcolor=fill, penwidth=penwidth, **isolated_style)
                 anchor = column[0]
                 if prev_anchor is not None:
                     sub.edge(str(prev_anchor), str(anchor), style='invis')
@@ -756,13 +767,14 @@ def render_selected_orientation(
     reveal_correct_answer, dpi, disconnected_rows, node_fontsize, edge_fontsize,
     nodesep, ranksep, graph_size, graph_ratio, rankdir, auto_orient, wrap_labels,
     edge_label_style='plain',
+    node_style_mode='legacy',
 ):
     common = (merged_nodes, graph, correct_label, engine, hide_relatedto_labels)
     options = dict(reveal_correct_answer=reveal_correct_answer, dpi=dpi,
                    disconnected_rows=disconnected_rows, node_fontsize=node_fontsize,
                    edge_fontsize=edge_fontsize, nodesep=nodesep, ranksep=ranksep,
                    graph_size=graph_size, graph_ratio=graph_ratio, wrap_labels=wrap_labels,
-                   edge_label_style=edge_label_style)
+                   edge_label_style=edge_label_style, node_style_mode=node_style_mode)
     if auto_orient == 'off':
         path = render_graph(image_stem, *common, rankdir=rankdir, **options)
         return path, ({'edge_label_style': edge_label_style}
@@ -873,6 +885,10 @@ def parse_args():
                         help='Wrap long visible node labels in images only; 0 disables wrapping.')
     parser.add_argument('--edge-label-style', choices=['plain', 'parens'], default='plain',
                         help='Visible edge relation labels; parens wraps relation text in parentheses.')
+    parser.add_argument('--node-style', choices=['legacy', 'uniform'], default='legacy',
+                        help='Uniform hides question/answer membership in node styling.')
+    parser.add_argument('--reuse-render-from', type=Path,
+                        help='Reuse validated images/metadata from this dataset root; do not render again.')
     parser.add_argument('--dpi', type=int, default=200, help='Rendered PNG resolution.')
     parser.add_argument(
         '--disconnected-rows', type=int, default=3,
@@ -896,6 +912,8 @@ def parse_args():
 
 def main():
     args = parse_args()
+    if args.node_style == 'uniform' and args.reveal_correct_answer:
+        raise ValueError('Uniform node style cannot reveal the correct answer')
     if (args.max_degree < 0 or args.max_nodes < 0 or args.max_edges < 0
             or args.max_bridges < 0 or args.wrap_labels < 0):
         raise ValueError(
@@ -953,13 +971,25 @@ def main():
                             bridge_rule=args.bridge_rule, lifelines=args.lifelines,
                             core_policy=args.core_policy, max_bridges=args.max_bridges)
         image_stem = image_dir / f'q{statement_idx:05d}_clean'
-        image_path, render_metadata = render_selected_orientation(
-            image_stem, merged_nodes, graph, correct_label, args.engine, args.hide_relatedto_labels,
-            args.reveal_correct_answer, args.dpi, args.disconnected_rows,
-            args.node_fontsize, args.edge_fontsize, args.nodesep, args.ranksep,
-            args.graph_size, args.graph_ratio, args.rankdir, args.auto_orient, args.wrap_labels,
-            args.edge_label_style,
-        )
+        if args.reuse_render_from is None:
+            image_path, render_metadata = render_selected_orientation(
+                image_stem, merged_nodes, graph, correct_label, args.engine, args.hide_relatedto_labels,
+                args.reveal_correct_answer, args.dpi, args.disconnected_rows,
+                args.node_fontsize, args.edge_fontsize, args.nodesep, args.ranksep,
+                args.graph_size, args.graph_ratio, args.rankdir, args.auto_orient, args.wrap_labels,
+                args.edge_label_style, args.node_style,
+            )
+        else:
+            image_path = image_stem.with_suffix('.png')
+            source = args.reuse_render_from / args.split
+            saved, = load_jsonl(source / 'graphs' / f'q{statement_idx:05d}.jsonl')
+            expected = graph_metadata(statement_idx, statement, merged_nodes, graph,
+                                      str(image_path.relative_to(args.out_dir)))
+            if any(saved.get(key) != value for key, value in expected.items()):
+                raise ValueError(f'Reused graph differs at statement_idx={statement_idx}')
+            if not (args.reuse_render_from / saved['image']).is_file():
+                raise FileNotFoundError(args.reuse_render_from / saved['image'])
+            render_metadata = {key: value for key, value in saved.items() if key not in expected}
         rel_image_path = image_path.relative_to(args.out_dir)
 
         stage1_records.extend(

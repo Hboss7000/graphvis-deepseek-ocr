@@ -3,6 +3,11 @@
 
 from __future__ import annotations
 
+import sys as _fullrun_sys
+from pathlib import Path as _FullrunPath
+_fullrun_sys.path.insert(0, str(_FullrunPath(__file__).resolve().parents[1] / "scripts"))
+from fullrun_runtime import enrich_config, begin_item, finish_item
+
 import argparse
 import difflib
 import json
@@ -45,6 +50,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--condition", choices=CONDITIONS, required=True)
     parser.add_argument("--expected-count", type=int, default=500)
     parser.add_argument("--max-new-tokens", type=int, default=MAX_NEW_TOKENS)
+    parser.add_argument("--limit", type=int, help="Process only the first N records; input identity stays fixed for resume")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--preview-only", action="store_true")
     parser.add_argument("--approve-prompt-diff", action="store_true")
@@ -123,6 +129,7 @@ def write_run_config(
     }
     config.update(gemma.manifest_fields(args, processor_details, resolved_dtype))
     config['preflight_report'] = preflight_provenance
+    config = enrich_config(config)
     config_path = args.output_jsonl.parent / "run_config.json"
     if config_path.exists():
         existing = json.loads(config_path.read_text(encoding="utf-8"))
@@ -136,6 +143,8 @@ def write_run_config(
 
 def main() -> None:
     args = parse_args()
+    if args.limit is not None and args.limit <= 0:
+        raise ValueError("--limit must be positive")
     gemma.validate_args(args)
 
     records = read_jsonl(args.input_jsonl)
@@ -225,10 +234,11 @@ def main() -> None:
         )
 
     with args.output_jsonl.open("a", encoding="utf-8") as output:
-        for number, record in enumerate(records, start=1):
+        for number, record in enumerate(records[:args.limit], start=1):
             statement_idx = int(record["statement_idx"])
             if statement_idx in done:
                 continue
+            begin_item()
 
             kg_block = (
                 format_kg_block(metadata_by_idx[statement_idx])
@@ -266,6 +276,7 @@ def main() -> None:
                 "image_views": image_views,
                 "image_soft_tokens": image_soft_tokens,
             }
+            finish_item(result)
             output.write(json.dumps(result) + "\n")
             output.flush()
             print(

@@ -3,6 +3,11 @@
 
 from __future__ import annotations
 
+import sys as _fullrun_sys
+from pathlib import Path as _FullrunPath
+_fullrun_sys.path.insert(0, str(_FullrunPath(__file__).resolve().parents[3] / "scripts"))
+from fullrun_runtime import enrich_config, begin_item, finish_item
+
 import argparse
 import json
 import sys
@@ -287,6 +292,7 @@ def main() -> None:
     }
     if args.task_set != "paper":
         run_config["task_set"] = args.task_set
+    run_config = enrich_config(run_config)
     write_run_config(args.output_dir, run_config)
     runtime_path = args.output_dir / "runtime_metrics.json"
     if not runtime_path.exists():
@@ -308,6 +314,7 @@ def main() -> None:
             key = (idx, task)
             if key in done:
                 continue
+            begin_item()
             image_path = args.image_root / record["image"]
             if not image_path.is_file():
                 raise FileNotFoundError(f"Missing graph image: {image_path}")
@@ -349,6 +356,7 @@ def main() -> None:
                 "timestamp_utc": datetime.now(timezone.utc).isoformat(),
             }
             handle = handles[task]
+            finish_item(result)
             handle.write(json.dumps(result, ensure_ascii=False) + "\n")
             handle.flush()
             done.add(key)

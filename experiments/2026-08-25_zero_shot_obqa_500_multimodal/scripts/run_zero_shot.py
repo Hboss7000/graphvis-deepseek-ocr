@@ -13,6 +13,11 @@ KG-text prompt when metadata is supplied. A full run requires
 
 from __future__ import annotations
 
+import sys as _fullrun_sys
+from pathlib import Path as _FullrunPath
+_fullrun_sys.path.insert(0, str(_FullrunPath(__file__).resolve().parents[3] / "scripts"))
+from fullrun_runtime import enrich_config, begin_item, finish_item
+
 import argparse
 import difflib
 import importlib
@@ -80,6 +85,7 @@ def parse_args() -> argparse.Namespace:
         "--max-new-tokens", type=int,
         help="Optional cap overriding the remote image infer() default of 8192.",
     )
+    parser.add_argument("--limit", type=int, help="Process only the first N records; input identity stays fixed for resume")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument(
         "--preview-only",
@@ -327,6 +333,7 @@ def write_run_config(args: argparse.Namespace, transformers_version: str,
             "crop_mode": CROP_MODE,
         },
     }
+    config = enrich_config(config)
     config_path = args.output_jsonl.parent / "run_config.json"
     if config_path.exists():
         existing = json.loads(config_path.read_text(encoding="utf-8"))
@@ -340,6 +347,8 @@ def write_run_config(args: argparse.Namespace, transformers_version: str,
 
 def main() -> None:
     args = parse_args()
+    if args.limit is not None and args.limit <= 0:
+        raise ValueError("--limit must be positive")
     if args.condition == "kg_text" and args.graph_metadata is None:
         raise SystemExit("--graph-metadata is required for --condition kg_text")
     if not args.preview_only and not re.fullmatch(r"[0-9a-fA-F]{40}", args.revision or ""):
@@ -453,10 +462,11 @@ def main() -> None:
         )
 
     with args.output_jsonl.open("a", encoding="utf-8") as output:
-        for number, record in enumerate(records, start=1):
+        for number, record in enumerate(records[:args.limit], start=1):
             statement_idx = int(record["statement_idx"])
             if statement_idx in done:
                 continue
+            begin_item()
 
             if args.condition == "kg_text":
                 if metadata_by_idx is None:
@@ -514,6 +524,7 @@ def main() -> None:
                 "model_revision": args.revision,
                 "timestamp_utc": datetime.now(timezone.utc).isoformat(),
             }
+            finish_item(result)
             output.write(json.dumps(result) + "\n")
             output.flush()
             print(

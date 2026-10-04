@@ -3,6 +3,11 @@
 
 from __future__ import annotations
 
+import sys as _fullrun_sys
+from pathlib import Path as _FullrunPath
+_fullrun_sys.path.insert(0, str(_FullrunPath(__file__).resolve().parents[3] / "scripts"))
+from fullrun_runtime import enrich_config, begin_item, finish_item
+
 import argparse
 import json
 import re
@@ -56,6 +61,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--expected-count", type=int, required=True)
     parser.add_argument("--max-new-tokens", type=int, default=MAX_NEW_TOKENS)
     parser.add_argument("--seed", type=int, default=13)
+    parser.add_argument("--limit", type=int, help="Process only the first N records; input identity stays fixed for resume")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--preview-only", action="store_true")
     parser.add_argument("--approve-prompt-diff", action="store_true")
@@ -121,6 +127,7 @@ def write_run_config(args, records, metadata_by_idx, transformers_version,
                              "first_image_budget": first_image_budget},
         "vision_tokens_per_item": "Count of expanded image token IDs in processor input_ids",
     }
+    config = enrich_config(config)
     path = args.output_jsonl.parent / "run_config.json"
     if path.exists():
         existing = json.loads(path.read_text(encoding="utf-8"))
@@ -132,6 +139,8 @@ def write_run_config(args, records, metadata_by_idx, transformers_version,
 
 def main() -> None:
     args = parse_args()
+    if args.limit is not None and args.limit <= 0:
+        raise ValueError("--limit must be positive")
     if not re.fullmatch(r"[0-9a-fA-F]{40}", args.revision):
         raise ValueError("--revision must be an explicit 40-character Hub commit")
     if args.expected_count <= 0 or args.max_new_tokens <= 0:
@@ -215,10 +224,11 @@ def main() -> None:
         tiers.update(row.get("parse_tier", "MISSING") for row in read_jsonl(args.output_jsonl))
     generated_count = 0
     with args.output_jsonl.open("a", encoding="utf-8") as output:
-        for position, record in enumerate(records, start=1):
+        for position, record in enumerate(records[:args.limit], start=1):
             statement_idx = int(record["statement_idx"])
             if statement_idx in done:
                 continue
+            begin_item()
             per_item_kg = (format_kg_block(metadata_by_idx[statement_idx])
                            if args.condition == "kg_text" else None)
             body = render_prompt(record["prompt"], args.condition, kg_block=per_item_kg)
@@ -250,14 +260,15 @@ def main() -> None:
                 "model_revision": args.revision,
                 "timestamp_utc": datetime.now(timezone.utc).isoformat(),
             }
+            finish_item(result)
             output.write(json.dumps(result, ensure_ascii=False) + "\n")
             output.flush()
             done.add(statement_idx)
             generated_count += 1
             print(f"[{position}/{len(records)}] condition={args.condition} q={statement_idx} "
                   f"predicted={predicted or 'FAILED'} tokens={tokens} ceiling={ceiling}", flush=True)
-    require_fresh_output_progress(output_existed, len(records), generated_count)
-    if done != input_indices:
+    require_fresh_output_progress(output_existed, len(records[:args.limit]), generated_count)
+    if not {int(r["statement_idx"]) for r in records[:args.limit]} <= done:
         raise RuntimeError(f"Run ended with {len(done)}/{len(input_indices)} completed keys")
     print("PARSE TIER DISTRIBUTION: " + json.dumps(dict(sorted(tiers.items()))), flush=True)
 

@@ -3,6 +3,11 @@
 
 from __future__ import annotations
 
+import sys as _fullrun_sys
+from pathlib import Path as _FullrunPath
+_fullrun_sys.path.insert(0, str(_FullrunPath(__file__).resolve().parents[3] / "scripts"))
+from fullrun_runtime import enrich_config, begin_item, finish_item
+
 import argparse
 import json
 import re
@@ -231,6 +236,7 @@ def main() -> None:
                              "first_image_budget": first_image_budget},
         "vision_tokens_per_item": "Count of expanded image token IDs in processor input_ids",
     }
+    run_config = enrich_config(run_config)
     write_run_config(args.output_dir, run_config)
     runtime_path = args.output_dir / "runtime_metrics.json"
     if not runtime_path.exists():
@@ -248,6 +254,7 @@ def main() -> None:
             require_task(task, task_types)
             if (idx, task) in done:
                 continue
+            begin_item()
             image_path = args.image_root / record["image"]
             with Image.open(image_path) as opened:
                 image = opened.convert("RGB")
@@ -260,6 +267,7 @@ def main() -> None:
                     torch,
                 )
             result = make_result(record, *values, metadata_by_idx[idx], args)
+            finish_item(result)
             handles[task].write(json.dumps(result, ensure_ascii=False) + "\n")
             handles[task].flush()
             done.add((idx, task))

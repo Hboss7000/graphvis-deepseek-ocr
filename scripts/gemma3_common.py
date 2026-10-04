@@ -50,6 +50,8 @@ def add_common_args(parser):
     parser.add_argument('--seed', type=int, default=13)
     parser.add_argument('--preflight-report', type=Path,
                         help='Passed Stage 1 legibility report, required for full image inference')
+    parser.add_argument('--allow-failed-preflight', action='store_true',
+                        help='Record a failed readability gate as legibility-confounded (fullrun D6).')
 
 
 def validate_args(args):
@@ -262,10 +264,14 @@ def require_preflight(args, details):
     if report['identity'] != gate_identity(args, details):
         raise ValueError('Preflight model, revision, attention, crops or source graphs do not match')
     setting = 'pan_and_scan' if args.pan_and_scan else 'no_pan_and_scan'
-    if not report['settings'][setting]['passed']:
+    failed = not report['settings'][setting]['passed']
+    if failed and not getattr(args, 'allow_failed_preflight', False):
         raise ValueError(f'Legibility gate failed for {setting}; resolve it before full image inference')
     for item in report['images']:
         if sha256_file(args.image_root / item['image']) != item['sha256']:
             raise ValueError(f'Preflight image changed: {item["image"]}')
-    return {'path': str(args.preflight_report.resolve()),
-            'sha256': sha256_file(args.preflight_report), 'setting': setting}
+    result = {'path': str(args.preflight_report.resolve()),
+              'sha256': sha256_file(args.preflight_report), 'setting': setting}
+    if getattr(args, 'allow_failed_preflight', False):
+        result.update(passed=not failed, legibility_confounded=failed)
+    return result

@@ -3,6 +3,11 @@
 
 from __future__ import annotations
 
+import sys as _fullrun_sys
+from pathlib import Path as _FullrunPath
+_fullrun_sys.path.insert(0, str(_FullrunPath(__file__).resolve().parents[1] / "scripts"))
+from fullrun_runtime import enrich_config, begin_item, finish_item
+
 import argparse
 import json
 from contextlib import ExitStack
@@ -153,12 +158,14 @@ def run_preflight(args, records, metadata, model, processor, details, torch, run
                                           first_image, trial_args, details)
             config['image_processing']['first_image_budget'] = gemma.image_budget_diagnostics(
                 processor, inputs, first_image.size)
+        config = enrich_config(config)
         write_run_config(trial_dir, config)
         with path.open('a' if args.resume else 'w', encoding='utf-8') as handle:
             for record in records:
                 key = (int(record['statement_idx']), record['task_type'])
                 if key in done:
                     continue
+                begin_item()
                 with Image.open(args.image_root / record['image']) as opened:
                     image = opened.convert('RGB')
                     response, tokens, ceiling, image_views, image_soft_tokens = gemma.infer_one(
@@ -167,6 +174,7 @@ def run_preflight(args, records, metadata, model, processor, details, torch, run
                 row = make_result(record, response, tokens, ceiling, image_views,
                                   image_soft_tokens,
                                   metadata[int(record['statement_idx'])], trial_args)
+                finish_item(row)
                 rows.append(row)
                 done.add(key)
                 handle.write(json.dumps(row, ensure_ascii=False) + '\n')
@@ -342,6 +350,7 @@ def main() -> None:
     if args.preflight is not None:
         run_preflight(args, records, metadata_by_idx, model, processor, processor_details, torch, run_config)
         return
+    run_config = enrich_config(run_config)
     write_run_config(args.output_dir, run_config)
 
     generated_count = 0
@@ -357,6 +366,7 @@ def main() -> None:
             key = (idx, task)
             if key in done:
                 continue
+            begin_item()
             image_path = args.image_root / record["image"]
             if not image_path.is_file():
                 raise FileNotFoundError(f"Missing graph image: {image_path}")
@@ -369,6 +379,7 @@ def main() -> None:
                                  image_views, image_soft_tokens,
                                  metadata_by_idx[idx], args)
             handle = handles[task]
+            finish_item(result)
             handle.write(json.dumps(result, ensure_ascii=False) + "\n")
             handle.flush()
             done.add(key)
