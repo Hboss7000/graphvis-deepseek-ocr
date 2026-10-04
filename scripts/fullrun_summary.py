@@ -9,6 +9,10 @@ from score_stage1 import score_record
 
 
 def rehearsal_report(root):
+    recovery = root / 'outputs' / (DATA_NAME + '_s0b') / 'source.json'
+    if recovery.exists():
+        from fullrun_s0b import gate
+        return gate(root, root / json.loads(recovery.read_text())['source_smoke_root'])
     base = root / 'outputs' / (DATA_NAME + '_smoke')
     report = {'models': {}, 'errors': [], 'probe': {}, 'passed': False}
     for model in MODELS:
@@ -49,9 +53,11 @@ def rehearsal_report(root):
                 for tier in values:
                     values[tier].append(scored['set_metrics'][tier]['recall'])
             report['probe'][spec['label']] = {tier: sum(v) / len(v) for tier, v in values.items()}
-        drop = report['probe']['probe_legacy']['basic'] - report['probe']['probe_uniform']['basic']
-        report['probe'].update(basic_recall_drop=drop, allowed_drop=.05, passed=drop <= .05)
-        if drop > .05:
+        from report_fullrun_probes import paired_report
+        report['probe'] = paired_report(root / manifest['probe_input'], data / 'test/graph_metadata_0_500.jsonl',
+            {arm: base / 'llava' / ('probe_' + arm) / 'predictions_llava_node_description.jsonl'
+             for arm in ('uniform', 'legacy')}, 20)
+        if not report['probe']['gate']['passed']:
             report['errors'].append('Uniform reading-probe basic recall fell by more than 5 percentage points')
         # Preflight must have run both real crop paths, regardless of recall gate outcome.
         preflight_spec, = auxiliary_specs(root, 'gemma', True)
@@ -70,7 +76,8 @@ def print_report(report):
         print_table(result)
         if 'estimate' in result:
             print('Estimate: ' + json.dumps(result['estimate'], sort_keys=True))
-    print('Reading probe (basic headline, raw alongside): ' + json.dumps(report['probe'], sort_keys=True))
+    print('Reading probe (basic headline, raw alongside): ' + json.dumps(
+        {k:v for k,v in report['probe'].items() if k not in ('per_graph','sources')}, sort_keys=True))
     for error in report['errors']:
         print('FAILED: ' + error)
     print('COMPLETED rehearsal gate; STOP the Pod and review S-B before full runs.' if report['passed'] else 'FAILED rehearsal gate; do not launch full runs. STOP the Pod.')

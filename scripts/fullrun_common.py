@@ -73,7 +73,7 @@ def specs(root, model, smoke=False, data_name=DATA_NAME):
     meta = {r['statement_idx']: r for r in read_rows(root / metadata)}
     code_paths = sorted(set(
         list((root / 'scripts').glob('fullrun_*.py'))
-        + [root / 'scripts/verify_fullrun.py', root / 'scripts/gemma3_common.py', root / 'scripts/llava_common.py',
+        + [root / 'scripts/verify_fullrun.py', root / 'scripts/report_fullrun_probes.py', root / 'scripts/gemma3_common.py', root / 'scripts/llava_common.py',
            root / 'scripts/eval_gemma3_stage1.py', root / 'scripts/eval_gemma3_stage2.py']
         + list((root / S1).glob('*.py')) + list((root / QA).glob('*.py'))))
     code_files = {str(path.relative_to(root)): sha(path) for path in code_paths}
@@ -149,13 +149,13 @@ def validate_frozen_files(root, spec):
             raise ValueError(f'Missing/changed input: {path}')
 
 
-def tripwire(rows, stage, reference):
+def tripwire(rows, stage, reference, reading_probe=False):
     if len(rows) < 20:
         return None
     first = rows[:20]
-    if stage == 'qa' and sum(parse_answer(r['raw_response'], 4)[0] == 'FAILED' for r in first) / 20 > MAX_PARSE_FAILURE:
+    if not reading_probe and stage == 'qa' and sum(parse_answer(r['raw_response'], 4)[0] == 'FAILED' for r in first) / 20 > MAX_PARSE_FAILURE:
         return 'more than 50% QA parse failures in first 20'
-    if stage == 'stage1' and sum(not r['raw_response'].strip() or r.get('generated_token_count', 0) <= 1 for r in first) / 20 > .8:
+    if not reading_probe and stage == 'stage1' and sum(not r['raw_response'].strip() or r.get('generated_token_count', 0) <= 1 for r in first) / 20 > .8:
         return 'more than 80% empty/one-token Stage 1 responses in first 20'
     times = [r.get('item_elapsed_seconds') for r in first]
     if all(isinstance(t, (int, float)) and math.isfinite(t) and t > 0 for t in times) and sum(times) / 20 > reference * 3:
@@ -196,10 +196,11 @@ def verify_job(directory, spec, complete=True):
                 raise ValueError('QA stored parse differs from shared scorer')
     failures = sum(parse_answer(r['raw_response'], 4)[0] == 'FAILED' for r in rows) if spec['stage'] == 'qa' else 0
     ceiling = sum(bool(r['hit_token_ceiling']) for r in rows)
-    wire = tripwire(sorted(rows, key=lambda r: r.get('timestamp_utc', '')), spec['stage'], spec['seconds_per_item_reference'])
+    reading_probe = spec['label'].startswith('probe_')
+    wire = tripwire(sorted(rows, key=lambda r: r.get('timestamp_utc', '')), spec['stage'], spec['seconds_per_item_reference'], reading_probe=reading_probe)
     if wire:
         raise ValueError('TRIPWIRE: ' + wire)
-    if rows and (failures / len(rows) > MAX_PARSE_FAILURE or ceiling / len(rows) > MAX_CEILING):
+    if not reading_probe and rows and (failures / len(rows) > MAX_PARSE_FAILURE or ceiling / len(rows) > MAX_CEILING):
         raise ValueError(f'Parse/ceiling sanity threshold exceeded: FAILED={failures}, ceiling={ceiling}/{len(rows)}')
     return {'job': spec['label'], 'rows': len(rows), 'expected': spec['record_count'], 'FAILED': failures,
             'ceilings': ceiling, 'parse_tiers': dict(Counter(r.get('parse_tier') for r in rows)) if spec['stage'] == 'qa' else {},

@@ -501,18 +501,18 @@ def prune_graph(merged_nodes, merged_edges, max_nodes, max_edges, max_degree, *,
 
 
 def node_style(cid, merged_nodes, correct_label, reveal_correct_answer=False, wrap_labels=0,
-               style_mode='legacy'):
+               style_mode='legacy', node_fill=None):
     info = merged_nodes[cid]
     if style_mode == 'uniform':
-        return wrap_node_label(label_for_node(info['name']), wrap_labels), '#ADD8E6', '1.5'
+        return wrap_node_label(label_for_node(info['name']), wrap_labels), node_fill or '#ADD8E6', '1.5'
     if info['in_question']:
-        return wrap_node_label(label_for_node(info['name']), wrap_labels), '#ADD8E6', '1.5'
+        return wrap_node_label(label_for_node(info['name']), wrap_labels), node_fill or '#ADD8E6', '1.5'
     if info['in_choices']:
         is_correct = reveal_correct_answer and correct_label in info['in_choices']
         fill = '#90EE90' if is_correct else '#E0E0E0'
         penwidth = '3' if is_correct else '1.5'
-        return wrap_node_label(label_for_node(info['name']), wrap_labels), fill, penwidth
-    return wrap_node_label(label_for_node(info['name']), wrap_labels), 'white', '1.5'
+        return wrap_node_label(label_for_node(info['name']), wrap_labels), node_fill or fill, penwidth
+    return wrap_node_label(label_for_node(info['name']), wrap_labels), node_fill or 'white', '1.5'
 
 
 def render_graph(
@@ -521,7 +521,7 @@ def render_graph(
     node_fontsize=18, edge_fontsize=14, nodesep=0.5, ranksep=0.7,
     graph_size=None, graph_ratio=None, rankdir="LR", wrap_labels=0,
     edge_label_style='plain',
-    node_style_mode='legacy',
+    node_style_mode='legacy', node_fill=None,
 ):
     if node_style_mode not in ('legacy', 'uniform'):
         raise ValueError(f'Unknown node style: {node_style_mode}')
@@ -557,7 +557,7 @@ def render_graph(
     dot.attr('edge', fontname='Helvetica', fontsize=str(edge_fontsize), arrowsize='0.8', penwidth='1.2')
 
     for cid in graph['connected_nodes']:
-        label, fill, penwidth = node_style(cid, merged_nodes, correct_label, reveal_correct_answer, wrap_labels, node_style_mode)
+        label, fill, penwidth = node_style(cid, merged_nodes, correct_label, reveal_correct_answer, wrap_labels, node_style_mode, node_fill)
         uniform = {'color': 'black', 'style': 'rounded,filled,solid'} if node_style_mode == 'uniform' else {}
         dot.node(str(cid), label=label, fillcolor=fill, penwidth=penwidth, **uniform)
 
@@ -583,7 +583,7 @@ def render_graph(
                 with sub.subgraph() as col:
                     col.attr(rank='same')
                     for cid in column:
-                        label, fill, penwidth = node_style(cid, merged_nodes, correct_label, reveal_correct_answer, wrap_labels, node_style_mode)
+                        label, fill, penwidth = node_style(cid, merged_nodes, correct_label, reveal_correct_answer, wrap_labels, node_style_mode, node_fill)
                         isolated_style = ({'color': 'black', 'style': 'rounded,filled,solid'}
                                           if node_style_mode == 'uniform' else {'style': 'rounded,filled,dashed'})
                         col.node(str(cid), label=label, fillcolor=fill, penwidth=penwidth, **isolated_style)
@@ -767,14 +767,14 @@ def render_selected_orientation(
     reveal_correct_answer, dpi, disconnected_rows, node_fontsize, edge_fontsize,
     nodesep, ranksep, graph_size, graph_ratio, rankdir, auto_orient, wrap_labels,
     edge_label_style='plain',
-    node_style_mode='legacy',
+    node_style_mode='legacy', node_fill=None,
 ):
     common = (merged_nodes, graph, correct_label, engine, hide_relatedto_labels)
     options = dict(reveal_correct_answer=reveal_correct_answer, dpi=dpi,
                    disconnected_rows=disconnected_rows, node_fontsize=node_fontsize,
                    edge_fontsize=edge_fontsize, nodesep=nodesep, ranksep=ranksep,
                    graph_size=graph_size, graph_ratio=graph_ratio, wrap_labels=wrap_labels,
-                   edge_label_style=edge_label_style, node_style_mode=node_style_mode)
+                   edge_label_style=edge_label_style, node_style_mode=node_style_mode, node_fill=node_fill)
     if auto_orient == 'off':
         path = render_graph(image_stem, *common, rankdir=rankdir, **options)
         return path, ({'edge_label_style': edge_label_style}
@@ -844,6 +844,12 @@ def indices_suffix(path, split):
     return stem[len(prefix):] if stem.startswith(prefix) else stem
 
 
+def node_fill_hex(value):
+    if not re.fullmatch(r'#?[0-9a-fA-F]{6}', value):
+        raise argparse.ArgumentTypeError('node fill must be a six-digit HEX colour (#RRGGBB)')
+    return '#' + value.lstrip('#').upper()
+
+
 def parse_args():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--split', default='train', choices=['train', 'dev', 'test'])
@@ -885,6 +891,7 @@ def parse_args():
                         help='Wrap long visible node labels in images only; 0 disables wrapping.')
     parser.add_argument('--edge-label-style', choices=['plain', 'parens'], default='plain',
                         help='Visible edge relation labels; parens wraps relation text in parentheses.')
+    parser.add_argument('--node-fill', type=node_fill_hex, help='Override every node fill with #RRGGBB; omitted preserves existing colours.')
     parser.add_argument('--node-style', choices=['legacy', 'uniform'], default='legacy',
                         help='Uniform hides question/answer membership in node styling.')
     parser.add_argument('--reuse-render-from', type=Path,
@@ -977,7 +984,7 @@ def main():
                 args.reveal_correct_answer, args.dpi, args.disconnected_rows,
                 args.node_fontsize, args.edge_fontsize, args.nodesep, args.ranksep,
                 args.graph_size, args.graph_ratio, args.rankdir, args.auto_orient, args.wrap_labels,
-                args.edge_label_style, args.node_style,
+                args.edge_label_style, args.node_style, args.node_fill,
             )
         else:
             image_path = image_stem.with_suffix('.png')

@@ -114,6 +114,7 @@ def write_run_config(
             "but omitted from kg_text because they produce no triples"
         ),
         "effective_max_new_tokens": args.max_new_tokens,
+        "generation": {"do_sample": False, "num_beams": 1, "max_new_tokens": args.max_new_tokens},
         "transformers_version": transformers_version,
         "processor_pixel_budget_api": processor_budget_api,
         "max_new_tokens": args.max_new_tokens,

@@ -106,7 +106,12 @@ print('COMPLETED imports/GPU/version preflight: ' + torch.cuda.get_device_name(0
 '''
     imports = ['accelerate', 'safetensors', 'sentencepiece']
     if model == 'deepseek':
-        imports += ['einops', 'addict', 'easydict']
+        from fullrun_snapshot_imports import snapshot_imports
+        model_id, revision = MODELS[model]
+        pinned = workspace / '.cache/huggingface/hub' / ('models--' + model_id.replace('/', '--')) / 'snapshots' / revision
+        audit = snapshot_imports(pinned)
+        print('Pinned snapshot imports: ' + json.dumps(audit, sort_keys=True), flush=True)
+        imports = audit['required']
     subprocess.run([str(py), '-c', code, json.dumps(versions), json.dumps(imports)], check=True, timeout=90)
     model_id, revision = MODELS[model]
     snapshot = workspace / '.cache/huggingface/hub' / ('models--' + model_id.replace('/', '--')) / 'snapshots' / revision
@@ -186,7 +191,7 @@ def watch_job(cmd, directory, spec, log, deadline, poll_seconds=1, stall_seconds
                     rows = prediction_rows(target, spec, growing=process.poll() is None)
                     validate_rows(rows, spec)
                     rows.sort(key=lambda r: r.get('timestamp_utc', ''))
-                    reason = tripwire(rows, spec['stage'], spec['seconds_per_item_reference'])
+                    reason = tripwire(rows, spec['stage'], spec['seconds_per_item_reference'], reading_probe=spec['label'].startswith('probe_'))
                     if reason:
                         break
                 if not reason and now - last_growth >= stall_seconds:
@@ -228,16 +233,16 @@ def record_status(path, status):
 
 
 def run_model(args, model, deadline):
-    jobs = specs(args.root, model, args.smoke)
-    auxiliary = auxiliary_specs(args.root, model, args.smoke)
+    jobs = getattr(args, 'recovery_jobs', {}).get(model, specs(args.root, model, args.smoke))
+    auxiliary = [] if getattr(args, 'recovery_jobs', None) is not None else auxiliary_specs(args.root, model, args.smoke)
     sequence = auxiliary + jobs if model == 'gemma' else jobs + auxiliary
-    mode = 'smoke' if args.smoke else 'results'
+    mode = 's0b' if getattr(args, 'recovery_jobs', None) is not None else ('smoke' if args.smoke else 'results')
     base = args.root / 'outputs' / (DATA_NAME + '_' + mode) / model
     log_root = args.workspace / 'logs' / (DATA_NAME + '_' + mode) / model
     if args.plan:
         for spec in sequence:
             for limit in ([3, 5] if args.smoke and spec['label'] == 'qa_image' else [None]):
-                print(shlex.join(command(args.root, args.workspace, spec, base / spec['label'], base / 'preflight/preflight_report.json' if model == 'gemma' and spec['label'] != 'preflight' else None, limit)))
+                print(shlex.join(command(args.root, args.workspace, spec, base / spec['label'], getattr(args, 'gemma_preflight', base / 'preflight/preflight_report.json') if model == 'gemma' and spec['label'] != 'preflight' else None, limit)))
         return True
     if base.exists() and any(p.name not in ('.lock', 'session.json') for p in base.iterdir()) and not (base / 'session.json').exists():
         raise ValueError(f'Model output collision: {base}')
@@ -274,7 +279,7 @@ def run_model(args, model, deadline):
             directory = base / spec['label']
             frozen_json(directory / 'contract.json', spec)
             status_file = base / 'status' / (spec['label'] + '.json')
-            report = base / 'preflight/preflight_report.json' if model == 'gemma' and spec['label'] != 'preflight' else None
+            report = getattr(args, 'gemma_preflight', base / 'preflight/preflight_report.json') if model == 'gemma' and spec['label'] != 'preflight' else None
             try:
                 if status_file.exists() and json.loads(status_file.read_text())['state'] == 'COMPLETED':
                     if spec['label'] == 'preflight':

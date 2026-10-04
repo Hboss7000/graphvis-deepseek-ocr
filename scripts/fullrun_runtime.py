@@ -10,6 +10,20 @@ from time import perf_counter
 _started = None
 
 
+def generation_settings(config):
+    """Normalize recorded decoding schemas, including the historical QA writers."""
+    generation = config.get('generation', config.get('greedy_generation'))
+    if generation is not None:
+        return dict(generation)
+    model = config.get('model_id')
+    if model not in ('Qwen/Qwen3-VL-8B-Instruct', 'google/gemma-3-12b-it'):
+        raise ValueError('Missing recorded generation settings for unrecognized runner')
+    # These two legacy QA writers recorded the cap flat; their infer_one calls
+    # explicitly pass do_sample=False and num_beams=1. New writers record all three.
+    return {'do_sample': config.get('do_sample', False), 'num_beams': config.get('num_beams', 1),
+            'max_new_tokens': config.get('effective_max_new_tokens', config.get('max_new_tokens'))}
+
+
 def contract():
     path = os.environ.get('FULLRUN_CONTRACT')
     return json.loads(Path(path).read_text()) if path else None
@@ -21,7 +35,14 @@ def enrich_config(config):
         return config
     config = dict(config)
     for name in ('torch', 'transformers'):
-        config.setdefault(name + '_version', sys.modules[name].__version__)
+        if name + '_version' not in config:
+            version = getattr(sys.modules.get(name), '__version__', None)
+            if version is None:
+                raise ValueError(f'Cannot determine installed {name} version')
+            config[name + '_version'] = version
+    config['generation'] = generation_settings(config)
+    if 'effective_max_new_tokens' not in config:
+        config['effective_max_new_tokens'] = config['generation'].get('max_new_tokens')
     for name in ('model_id', 'model_revision', 'effective_max_new_tokens', 'prompt_bodies_sha256'):
         if config.get(name) != spec[name]:
             raise ValueError(f'Fullrun contract mismatch: {name}: {config.get(name)!r} != {spec[name]!r}')
@@ -30,6 +51,8 @@ def enrich_config(config):
             raise ValueError(f'Fullrun version mismatch: {name}')
     if config['generation'].get('do_sample') is not False or config['generation'].get('num_beams') != 1:
         raise ValueError('Fullrun requires greedy decoding')
+    if config['generation'].get('max_new_tokens') != spec['effective_max_new_tokens']:
+        raise ValueError('Fullrun generation token cap mismatch')
     for key in ('input_jsonl', 'graph_metadata'):
         if config[key]['sha256'] != spec['input_files'][spec[key]]:
             raise ValueError(f'Fullrun input mismatch: {key}')

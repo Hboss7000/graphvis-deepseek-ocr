@@ -1,5 +1,7 @@
 # Full inference run — S-A, CPU preparation (2026-10-04)
 
+For recovery of the fetched S0 failures and the new three-arm 50-graph reading gate, use [Session 0b](FULLRUN_S0B.md). Reading-probe parse/ceiling outcomes are descriptive; their quality gate uses paired basic recall only. Ordinary jobs retain the sanity limits below. Once session 0b has a source marker, full launchers require its recomputed gate.
+
 Continue on `inference50-core-keep`. No GPU job, model download, pod access, or environment installation was performed during preparation. Stop at S-A; Henrique reviews before S0. Stop again after the rehearsal (S-B), each model (S-C), and consolidation (S-D).
 
 ## Prepared data and verified consistency
