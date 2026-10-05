@@ -113,3 +113,42 @@ def test_scoring_uses_prefix_plus_continuation_and_counts_only_new_tokens():
 def test_prefix_rejects_question_without_unambiguous_named_targets():
     with pytest.raises(ValueError):prompts.gold_template_prefix('node_degree','Look at the node.')
     with pytest.raises(ValueError):prompts.gold_template_prefix('relation_identification','Only "a" is given.')
+
+
+@pytest.mark.parametrize('template,mode,arm',[
+    ('hf-chat','none','main'),('hf-chat','gold-template','P1'),
+    ('llava_v1','none','P2'),('llava_v1','gold-template','P3')])
+def test_arm_settings_record_identical_user_turn_hash(template,mode,arm):
+    records=[{'statement_idx':1,'task_type':'node_number','prompt':'How many nodes?'}]
+    args=SimpleNamespace(prompt_template=template,assistant_prefix_mode=mode)
+    expected=runner.prompt_bodies_sha256(records,'none')
+    settings=prompts.config_settings(args,expected)
+    assert settings=={'prompt_template':template,'assistant_prefix_mode':mode,
+                      'diagnostic_arm':arm,'user_turn_text_sha256':expected}
+
+
+def test_legacy_default_config_resumes_but_diagnostic_drift_does_not(tmp_path):
+    old={'prompt_bodies_sha256':'old-user-hash','generation':{'max_new_tokens':1024}}
+    (tmp_path/'run_config.json').write_text(json.dumps(old))
+    current={**old,**prompts.config_settings(SimpleNamespace(prompt_template='hf-chat',assistant_prefix_mode='none'),'old-user-hash')}
+    def writer(directory,config):
+        assert config==json.loads((directory/'run_config.json').read_text())
+    prompts.write_compatible_config(tmp_path,current,writer)
+    changed={**old,**prompts.config_settings(SimpleNamespace(prompt_template='hf-chat',assistant_prefix_mode='gold-template'),'old-user-hash')}
+    with pytest.raises(AssertionError):prompts.write_compatible_config(tmp_path,changed,writer)
+    assert json.loads((tmp_path/'run_config.json').read_text())==old
+
+
+def test_diagnostic_conditions_are_pinned_and_main_cli_defaults_unchanged(monkeypatch):
+    argv=['run_stage1_llava.py','--input-jsonl','i','--graph-metadata','m','--image-root','r',
+          '--output-dir','o','--expected-count','900']
+    monkeypatch.setattr(sys,'argv',argv)
+    args=runner.parse_args()
+    assert (args.prompt_template,args.assistant_prefix_mode,args.seed,args.max_new_tokens)==('hf-chat','none',13,1024)
+    args.assistant_prefix_mode='gold-template'
+    prompts.validate_diagnostic_settings(args)
+    args.max_new_tokens=64
+    with pytest.raises(ValueError,match='1024'):prompts.validate_diagnostic_settings(args)
+    args.max_new_tokens=1024
+    monkeypatch.setenv('FULLRUN_CONTRACT','main.json')
+    with pytest.raises(ValueError,match='own outputs'):prompts.validate_diagnostic_settings(args)

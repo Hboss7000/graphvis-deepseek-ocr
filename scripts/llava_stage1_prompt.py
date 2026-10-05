@@ -68,3 +68,48 @@ def append_assistant_prefix(formatted, prefix, prompt_template):
     if not formatted.rstrip().endswith(marker):
         raise ValueError(f'Expected assistant boundary {marker!r}')
     return formatted + ('' if formatted[-1:].isspace() else ' ') + prefix
+
+
+def diagnostic_arm(prompt_template, assistant_prefix_mode):
+    return {('hf-chat','none'): 'main', ('hf-chat','gold-template'): 'P1',
+            ('llava_v1','none'): 'P2', ('llava_v1','gold-template'): 'P3'}[
+                (prompt_template, assistant_prefix_mode)]
+
+
+def config_settings(args, user_turn_hash):
+    template = getattr(args, 'prompt_template', 'hf-chat')
+    mode = getattr(args, 'assistant_prefix_mode', 'none')
+    return {'prompt_template': template, 'assistant_prefix_mode': mode,
+            'diagnostic_arm': diagnostic_arm(template, mode), 'user_turn_text_sha256': user_turn_hash}
+
+
+def validate_diagnostic_settings(args):
+    import os
+    arm = diagnostic_arm(args.prompt_template, args.assistant_prefix_mode)
+    if arm == 'main':
+        return
+    if args.seed != 13 or args.max_new_tokens != 1024 or args.answer_format != 'none':
+        raise ValueError('Diagnostic arms require seed=13, max_new_tokens=1024, answer_format=none')
+    if os.environ.get('FULLRUN_CONTRACT'):
+        raise ValueError('Diagnostic arms require their own outputs, outside the main fullrun contract')
+    for name in ('STAGE1_MATRIX_CELL_JSON', 'STAGE1_FROZEN_PROMPT_POLICY_JSON'):
+        if os.environ.get(name):
+            raise ValueError(f'Diagnostic arm cannot inherit {name}')
+
+
+def write_compatible_config(directory, config, writer):
+    """Keep historical default-run resumes compatible; reject diagnostic drift."""
+    import json
+    path = directory / 'run_config.json'
+    if path.exists():
+        previous = json.loads(path.read_text())
+        if config['diagnostic_arm'] == 'main':
+            # These newly recorded defaults are operational provenance only.
+            # Preserve the historical config file; do not relax any old setting.
+            defaults = {'prompt_template': 'hf-chat', 'assistant_prefix_mode': 'none',
+                        'diagnostic_arm': 'main', 'user_turn_text_sha256': config['prompt_bodies_sha256']}
+            config = dict(config)
+            for key, value in defaults.items():
+                if key not in previous and config.get(key) == value:
+                    config.pop(key)
+    writer(directory, config)

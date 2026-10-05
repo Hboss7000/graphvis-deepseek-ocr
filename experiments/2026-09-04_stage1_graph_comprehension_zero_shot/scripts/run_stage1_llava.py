@@ -51,7 +51,8 @@ from prompt_common import sha256_file  # noqa: E402
 
 
 from llava_stage1_prompt import (PROMPT_TEMPLATES, ASSISTANT_PREFIX_MODES,
-                                format_stage1_prompt, prefix_for_record, append_assistant_prefix)
+                                format_stage1_prompt, prefix_for_record, append_assistant_prefix,
+                                config_settings, validate_diagnostic_settings, write_compatible_config)
 
 
 MAX_NEW_TOKENS = 1024
@@ -155,6 +156,7 @@ def infer_one(model, processor, prompt_text, image, args, torch):
 
 def main() -> None:
     args = parse_args()
+    validate_diagnostic_settings(args)
     if not re.fullmatch(r"[0-9a-fA-F]{40}", args.revision):
         raise ValueError("--revision must be an explicit 40-character Hub commit")
     if args.expected_count <= 0 or args.max_new_tokens <= 0:
@@ -256,8 +258,11 @@ def main() -> None:
                              "first_image_budget": first_image_budget},
         "vision_tokens_per_item": "Count of expanded image token IDs in processor input_ids",
     }
+    run_config.update(config_settings(args, run_config["prompt_bodies_sha256"]))
+    if args.prompt_template == "llava_v1":
+        run_config["prompt"] = "Unchanged shared Stage 1 body through GraphVis conv_llava_v1 (TWO)"
     run_config = enrich_config(run_config)
-    write_run_config(args.output_dir, run_config)
+    write_compatible_config(args.output_dir, run_config, write_run_config)
     runtime_path = args.output_dir / "runtime_metrics.json"
     if not runtime_path.exists():
         runtime_path.write_text(
