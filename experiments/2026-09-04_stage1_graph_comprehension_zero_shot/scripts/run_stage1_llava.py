@@ -50,7 +50,8 @@ from llava_common import (  # noqa: E402
 from prompt_common import sha256_file  # noqa: E402
 
 
-from llava_stage1_prompt import PROMPT_TEMPLATES, format_stage1_prompt
+from llava_stage1_prompt import (PROMPT_TEMPLATES, ASSISTANT_PREFIX_MODES,
+                                format_stage1_prompt, prefix_for_record, append_assistant_prefix)
 
 
 MAX_NEW_TOKENS = 1024
@@ -72,6 +73,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max-new-tokens", type=int, default=MAX_NEW_TOKENS)
     parser.add_argument("--seed", type=int, default=13)
     parser.add_argument("--prompt-template", choices=PROMPT_TEMPLATES, default="hf-chat")
+    parser.add_argument("--assistant-prefix-mode", choices=ASSISTANT_PREFIX_MODES, default="none")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--preview-only", action="store_true")
     parser.add_argument("--approve-prompts", action="store_true")
@@ -83,12 +85,17 @@ def parse_args() -> argparse.Namespace:
 
 
 def render_prompt(processor, record, args):
-    return format_stage1_prompt(processor, raw_image_prompt(record, args.answer_format),
-                                getattr(args, "prompt_template", "hf-chat"))
+    template = getattr(args, "prompt_template", "hf-chat")
+    formatted = format_stage1_prompt(processor, raw_image_prompt(record, args.answer_format), template)
+    prefix = prefix_for_record(record, getattr(args, "assistant_prefix_mode", "none"))
+    return append_assistant_prefix(formatted, prefix, template)
 
 
 def make_result(record, response, generated_tokens, hit_ceiling, vision_tokens,
                 elapsed_seconds, peak_memory_bytes, metadata, args):
+    prefix = prefix_for_record(record, getattr(args, "assistant_prefix_mode", "none"))
+    continuation = response
+    response = prefix + continuation
     task = str(record["task_type"])
     diagnostics = answer_format_diagnostics(task, response, args.answer_format)
     diagnostics["ceiling_hit_before_complete_answer"] = bool(
@@ -114,6 +121,9 @@ def make_result(record, response, generated_tokens, hit_ceiling, vision_tokens,
         "model_revision": args.revision,
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
     }
+    if prefix:
+        result["assistant_prefix"] = prefix
+        result["continuation_response"] = continuation
     if isinstance(record.get("gold"), dict):
         result["structured_gold"] = record["gold"]
     return result
@@ -137,7 +147,9 @@ def infer_one(model, processor, prompt_text, image, args, torch):
     peak = int(torch.cuda.max_memory_allocated())
     generated = output_ids[0, input_length:]
     count = int(generated.shape[-1])
-    response = processor.decode(generated, skip_special_tokens=True).strip()
+    response = processor.decode(generated, skip_special_tokens=True)
+    if getattr(args, "assistant_prefix_mode", "none") == "none":
+        response = response.strip()
     return response, count, count >= args.max_new_tokens, vision_tokens, elapsed, peak
 
 
