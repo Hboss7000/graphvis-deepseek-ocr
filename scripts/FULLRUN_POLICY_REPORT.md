@@ -1,3 +1,5 @@
+> Superseded scheduling note: full sessions are now strict-64 only, grouped S1 LLaVA / S2 Qwen+DeepSeek / S3 Gemma. Rescue is optional and separate. The old rescue allowances below are historical, not the current plan. Current strict-only costs and commands are in [FULLRUN.md](FULLRUN.md). Headline: extended only after all four verified rescues, otherwise strict-64; both tables reported.
+
 # Full-run CPU policy report — 2026-10-05
 
 No GPU job, paid infrastructure action or model-weight load was performed. User pushes and launches separately. Current decisions: uniform blue, QA64→every-ceiling512, Stage1=1024, nonblocking Gemma D6. Gate is per model.

@@ -61,7 +61,7 @@ The CPU stub tests exercise orchestration only. They **do not** constitute the r
 
 ## Full-run decisions fixed on 2026-10-05
 
-Uniform **light blue** is selected, with no regeneration. The all-50 reading comparison passed: paired basic blue − legacy is approximately −0.015. White remains a diagnostic arm. Every model starts all 500 QA answers per condition at **64 tokens**, then reruns **every** capped answer at **512**, including already parsed/correct answers, in `rescue_512/CONDITION`. Primary QA results replace only the capped strict responses with their reruns; strict-64 is reported alongside. Stage 1 remains **1024** with no rescue. Ceiling counts/rates are descriptive everywhere and Stage 1 reports them by task. QA parse failures only trip at n≥20 (>50% in the first 20); no final parse-rate gate is applied to five-item smoke results. Coverage, duplicates, identity/settings, missing measurements and frozen hashes remain hard checks. Time, output-growth and empty Stage 1 guards remain operational tripwires.
+Uniform **light blue** is selected, with no regeneration. The all-50 reading comparison passed: paired basic blue − legacy is approximately −0.015. White remains a diagnostic arm. Every model runs all 500 QA answers per condition at **64 tokens** and stops at strict-64. Rescue is a separate optional later session, never part of a full session. If requested, every capped answer reruns at **512**, including already parsed/correct answers, in `rescue_512/CONDITION`. The headline is extended only when **all four models** have completed verified rescues; otherwise strict-64. Both tables are always reported; an unavailable extended table is explicitly labelled unavailable with null metrics. Stage 1 remains **1024** with no rescue. Ceiling counts/rates are descriptive everywhere and Stage 1 reports them by task. QA parse failures only trip at n≥20 (>50% in the first 20); no final parse-rate gate is applied to five-item smoke results. Coverage, duplicates, identity/settings, missing measurements and frozen hashes remain hard checks. Time, output-growth and empty Stage 1 guards remain operational tripwires.
 
 The launch gate is **per model**. `fullrun_gate.py llava` reads only LLaVA smoke/resume evidence and its 50-graph probe; missing or failed Gemma/Qwen/DeepSeek does not block LLaVA. Qwen and DeepSeek require their own smoke and resume proofs. Gemma begins its full session with a fresh five-question QA smoke (all four conditions, image three→five resume proof; allow approximately three minutes), then automatically continues only if its own gate passes. Both Gemma legibility paths remain recorded and nonblocking under D6. Its full-session Stage 1 preflight still runs both crop paths and labels failed legibility as confounded.
 
@@ -69,29 +69,34 @@ The recovered Gemma `qa_image/resume_verified.json` was reconstructed locally fr
 
 Long prose answers require an unambiguous explicit `answer is X`, `correct answer: X`, or bolded letter. Explicit answer statements outrank bolded references; contradictory explicit conclusions stay unparsed. A sole letter/letter with punctuation or a single short option-label/choice line remains accepted. Prose letter mentions have no fallback. `Option A is wrong… so the answer is D` parses as D. Historical predictions are re-scored under this parser without editing their saved parse fields; additional old prefix-plus-explanation answers may now be unparsed.
 
-All new full QA outputs record **actual generated token IDs**, including special tokens, for every item (all four model paths, including DeepSeek image/text generation). Rescue checks every selected item's first 64 IDs against strict IDs, not decoded-string prefixes or retokenized text. Missing/short IDs and differences are explicitly reported in `prefix_report.json`; no selected item is omitted. Greedy decoding is a protocol expectation, not a claim that CUDA reruns are guaranteed bitwise identical. DeepSeek ceiling detection remains approximate because its flag uses response retokenization; prefix verification still uses actual IDs. A mismatch remains visible in the primary report and requires review; no response is silently discarded.
+All new full QA outputs record **actual generated token IDs**, including special tokens, for every item (all four model paths, including DeepSeek image/text generation). Rescue checks every selected item's first 64 IDs against strict IDs, not decoded-string prefixes or retokenized text. Missing/short IDs and differences are explicitly reported in `prefix_report.json`; no selected item is omitted. Greedy decoding is a protocol expectation, not a claim that CUDA reruns are guaranteed bitwise identical. DeepSeek ceiling detection remains approximate because its flag uses response retokenization; prefix verification still uses actual IDs. Every mismatch remains visible in the prefix report and prevents that rescue from qualifying for the extended headline; no response is silently discarded.
 
-`fullrun_manual.sh MODEL` automatically appends the rescue using the same whole-session time limit. Repeating the same session command resumes completed strict and rescue jobs. `fullrun_rescue.py MODEL --verify-only` is a CPU audit. `fullrun_consolidate.py MODEL --output-dir FRESH_DIR` validates strict/rescue coverage and writes strict-64 and extended-512 tables: accuracy (unparsed wrong), accuracy among parsed, parse-failure/ceiling rates and exact paired McNemar image-vs-text tests, for all three textual conditions. Graph strata use undirected correct-option reachability and all-500 nearest-rank node-count terciles with cutpoints 17/18 (229 low, 120 middle, 151 high) and ties kept together; condition metrics and paired differences are reported per stratum. Reachability matches preparation diagnostics. `fullrun_consolidate.py all` performs S-D and prints 30 extended answers round-robin across available models/conditions for spot checks; each model rescue also prints up to 30 across results available so far. Full-run predictions do not exist yet, so no extended accuracies/answers are fabricated.
+`fullrun_manual.sh MODEL` runs strict-64 only and resumes completed strict jobs. `fullrun_strict_session.sh S1|S2|S3` groups LLaVA, Qwen + DeepSeek sequentially, and Gemma respectively, with a shared session time allowance. Gemma starts its own fresh five-question QA smoke and resume proof before continuing automatically. LLaVA needs only its own smoke and the completed probe gate.
 
-### Measured CPU report and budget
+Optional later rescue: run `bash scripts/fullrun_rescue.sh MODEL` inside tmux on the approved same RTX PRO 6000 GPU type, with `MAX_HOURS` set from the later rescue plan. Default strict launchers never invoke it. It selects every saved strict ceiling, writes a separate labelled directory and resumes completed items. Rescue can also resume after a code-only update: its initial contract stays fixed, `rescue_512/code_attempts/` records each invocation’s actual code hashes, and newly generated rows link to that attempt. Strict contracts/configs and prediction hashes are preserved; strict code hashes and current rescue code hashes are recorded separately. A newer rescue commit is allowed, but model/revision, full input hashes, prompt hashes, seed, greedy decoding, versions and actual GPU type must match. The only allowed generation change is 64 → 512. Full QA records seed 13 and actual GPU type; Qwen/DeepSeek initialize the recorded seed in the shared full-run runtime. Rescue rejects source runs lacking this provenance or exact token IDs. `fullrun_rescue.py MODEL --verify-only` is a CPU prefix audit.
 
-[Per-model gate/estimate report](FULLRUN_POLICY_REPORT.md) records all fetched checks, source hashes, counts and estimates. All four fetched gates pass under the new rules; Gemma still runs its requested fresh startup smoke. Strict estimates are LLaVA 1.499 h, Qwen 1.647 h, DeepSeek .588 h and Gemma 1.908 h (Stage 1 4.579 s/item). Rescue allowances extrapolate the five-item ceiling rates to 500 per condition and use measured tokens/second; **each rerun is charged up to all 512 tokens**, not just the extra 448. These capped allowances are not predictions that every rerun reaches 512. Rates use generation elapsed time where available, otherwise measured item elapsed time including preprocessing. Loading/prefill overhead and full-dataset ceiling frequencies remain uncertain.
+After fetching each strict model, run on the laptop: `myvenv/bin/python scripts/fullrun_rescue_plan.py MODEL --model-dir FETCH/MODEL --output FRESH_JSON`. This reads only saved predictions, reports actual capped counts and measured tokens/s per condition, rescue hours/cost at $2.09/h, and ten capped answer excerpts (200 characters). Strict-64 censors completion lengths: its default estimate is the observed token replay **lower bound**, not a claimed completion-time estimate. Supply `--mean-rescue-tokens N` (64–512) for an explicit mean-length assumption at measured speed. Loading/prefill changes remain unmeasured; DeepSeek ceiling detection is labelled approximate. No worst-case 512 workload is substituted by default.
 
-| model | strict h | rescue allowance h | total h | $2.09/h | total +50% h | cost +50% |
-|---|---:|---:|---:|---:|---:|---:|
-| LLaVA | 1.499 | .682 | 2.180 | $4.56 | 3.270 | $6.83 |
-| Qwen | 1.647 | 1.683 | 3.331 | $6.96 | 4.996 | $10.44 |
-| DeepSeek | .588 | .000 | .588 | $1.23 | .882 | $1.84 |
-| Gemma | 1.908 | 5.741 | 7.649 | $15.99 | 11.473 | $23.98 |
-| total | 5.642 | 8.105 | 13.747 | $28.73 | 20.621 | $43.10 |
+`fullrun_consolidate.py MODEL --output-dir FRESH_DIR` verifies archived strict settings while permitting newer analysis code, then writes both tables, all condition metrics, exact paired McNemar image-vs-text tests, and reachability/node-tercile strata. The extended table is complete only after that model's rescue is verified; otherwise its metrics are explicitly null/unavailable. The headline decision checks **all four models**, even for a single-model report. Node cutpoints stay 17/18 (229/120/151); reachable graphs 390/110. `all` prints 30 available answers mixed across models/conditions, preferring rescued answers. No full results or rescued answers exist locally yet.
 
-Gemma's unmeasured requested ~3 minute startup allowance adds .05 h / $0.1045 before margin, .075 h / $0.15675 with margin: all-in allowance **13.797 h / $28.84**, or **20.696 h / $43.25** with 50%. DeepSeek had zero observed ceilings in its tiny smoke; this is not a guarantee of zero full-run rescues. Gemma's capped estimate exceeds the old four-hour guard; its actual later session budget/termination guard must be reviewed rather than silently reusing four hours.
+### Strict session estimates
+
+Measured s0b time/item extrapolated to 900 Stage 1 rows plus 500 answers per QA condition; excludes rescue, loading and transfer. S3 adds the requested unmeasured three-minute startup allowance.
+
+| session | models | expected h | cost at $2.09/h | h with 50% margin | cost with margin |
+|---|---|---:|---:|---:|---:|
+| S1 | LLaVA | 1.499 | $3.13 | 2.248 | $4.70 |
+| S2 | Qwen + DeepSeek | 2.235 | $4.67 | 3.353 | $7.01 |
+| S3 | Gemma + fresh smoke | 1.958 | $4.09 | 2.937 | $6.14 |
+| total | all four | 5.692 | $11.90 | 8.538 | $17.84 |
+
+The grouped local job limits round up to 2.25 / 3.36 / 2.94 hours. These stop inference, **not billing**. Confirm the pod's already approved automatic termination guard covers the chosen session; no command here provisions or modifies infrastructure. Earlier automatic-rescue allowances in the October 5 policy report are superseded by this strict-only plan.
 
 The nonblocking Stage 1 length audit used the pinned LLaVA-NeXT processor/tokenizer (transformers 5.16.1; temporary CPU-only torch 2.8.0+cpu/torchvision .23.0+cpu tooling, no model weights). Combined expanded image + chat prompt + gold + EOS: p25 **1982**, median **2192**, p75 **2381.25**, p90 **2766**, p95 **2824.95**, p99 **2975.04**, maximum **3137**; **613/900 exceed 2048**. Exact per-record/task counts are in `outputs/fullrun_policy_2026-10-05/stage1_lengths.json`. The first record of each of 100 graphs was checked against full processor output and image expansion reused across its nine tasks. These are the current NeXT chat/anyres lengths; verify the original GraphVis training collator/image path before fine-tuning. No model_max_length, image setting, prompt or data was changed.
 
-## First full session: LLaVA
+## Strict sessions S1 / S2 / S3
 
-Run the following **separate blocks on the laptop from this repository**. Each defines its own connection/fetch variables; no block relies on the previous block's shell state. `watch` is intentionally its own block; press Ctrl-C to return before proceeding. SSH uses the current existing pod, never an old hard-coded address. Henrique pushes; these instructions do not push or provision automatically. The existing single RTX PRO 6000 96 GB pod/cache and network volume must already be approved and available. Before launch, verify its approved automatic termination guard covers the LLaVA expected 2.18 h plus 50% (about **3 h 16 min**); this code does not create/start/modify pods or guards. The launcher has a 3.3 h whole-session stop limit, which stops inference but not billing.
+Run each separate block on the laptop from this repository. Each prompts for the current IP/port and (where needed) S1, S2 or S3; no shell state carries between blocks. S1 is LLaVA (1.499 h), S2 Qwen then DeepSeek (2.235 h), S3 Gemma with fresh smoke (1.958 h). Use the existing approved single RTX PRO 6000 96 GB pod/cache/network volume. Henrique pushes. The watch block stands alone: Ctrl-C before the next block. After each session: verify strict results, fetch everything, then explicitly terminate. No rescue runs in these blocks.
 
 ### 1. Push check and code update
 
@@ -108,23 +113,9 @@ if [[ "$EXPECTED" != "$REMOTE" ]]; then echo 'Push your reviewed commit first; r
 "${SSH[@]}" "root@$IP" "cd /workspace/bachelorArbeit && git pull --ff-only origin inference50-core-keep && test \"\$(git rev-parse HEAD)\" = '$EXPECTED'"
 ```
 
-### 2. Transfer only missing prepared files, then verify LLaVA gate
+### 2. Transfer missing inputs and evidence
 
-The full blue tree already had to be present for smoke input hashes. `--ignore-existing` fills missing files; it never replaces evidence. No white regeneration, model download or transfer of irrelevant models is needed. A mismatched existing file fails the gate rather than being overwritten.
-
-```bash
-set -euo pipefail
-read -rp 'Current pod SSH IP: ' IP
-read -rp 'Current pod SSH port: ' PORT
-SSH=(ssh -i "$HOME/.ssh/id_ed25519" -p "$PORT")
-RSYNC_SSH="ssh -i $HOME/.ssh/id_ed25519 -p $PORT"
-FETCH="$PWD/outputs"
-rsync -rltvz --ignore-existing --no-owner --no-group -e "$RSYNC_SSH" \
-  outputs/fullrun_2026-10-04_B "root@$IP:/workspace/bachelorArbeit/outputs/"
-"${SSH[@]}" "root@$IP" 'cd /workspace/bachelorArbeit && /workspace/venvs/venv_qwen/bin/python scripts/fullrun_gate.py llava'
-```
-
-### 3. Launch strict run and automatic rescue in tmux
+`--ignore-existing` fills missing files without replacing evidence. Existing mismatches fail verification. The historical smoke evidence is fetched locally already; transfer also fills in the recovered Gemma resume proof. No rendering or model download occurs.
 
 ```bash
 set -euo pipefail
@@ -133,10 +124,29 @@ read -rp 'Current pod SSH port: ' PORT
 SSH=(ssh -i "$HOME/.ssh/id_ed25519" -p "$PORT")
 RSYNC_SSH="ssh -i $HOME/.ssh/id_ed25519 -p $PORT"
 FETCH="$PWD/outputs"
-"${SSH[@]}" "root@$IP" 'mkdir -p /workspace/logs/fullrun_2026-10-04_B_results; tmux new-session -d -s fullrun-llava "cd /workspace/bachelorArbeit && MAX_HOURS=3.3 bash scripts/fullrun_manual.sh llava > /workspace/logs/fullrun_2026-10-04_B_results/llava_console.log 2>&1; read -r -p \"Session ended: STOP the Pod. Press Enter to close.\""'
+rsync -rltvz --ignore-existing --no-owner --no-group -e "$RSYNC_SSH" outputs/fullrun_2026-10-04_B "root@$IP:/workspace/bachelorArbeit/outputs/"
+rsync -rltvz --ignore-existing --no-owner --no-group -e "$RSYNC_SSH" outputs/fullrun_fetch_20261004_183521.qtJrSg/fullrun_2026-10-04_B_smoke "root@$IP:/workspace/bachelorArbeit/outputs/"
+rsync -rltvz --ignore-existing --no-owner --no-group -e "$RSYNC_SSH" outputs/fullrun_s0b_fetch_jcjYPY6T/fullrun_2026-10-04_B_s0b "root@$IP:/workspace/bachelorArbeit/outputs/"
+rsync -rltvz --ignore-existing --no-owner --no-group -e "$RSYNC_SSH" outputs/fullrun_s0b_inputs_2026-10-04 "root@$IP:/workspace/bachelorArbeit/outputs/"
 ```
 
-### 4. Single watch line (current job's log path, counter and GPU)
+### 3. Launch the chosen strict session in tmux
+
+S2 shares its 3.36-hour limit across both models; a failed Qwen job stops the group and preserves completed output for resume. S3 runs Gemma's own fresh smoke first. Repeat this block after the old tmux session exits to resume; it never schedules rescue.
+
+```bash
+set -euo pipefail
+read -rp 'Current pod SSH IP: ' IP
+read -rp 'Current pod SSH port: ' PORT
+read -rp 'Session (S1 LLaVA / S2 Qwen+DeepSeek / S3 Gemma): ' SESSION
+case "$SESSION" in S1|S2|S3) ;; *) echo 'Invalid session'; exit 2;; esac
+SSH=(ssh -i "$HOME/.ssh/id_ed25519" -p "$PORT")
+RSYNC_SSH="ssh -i $HOME/.ssh/id_ed25519 -p $PORT"
+FETCH="$PWD/outputs"
+"${SSH[@]}" "root@$IP" "mkdir -p /workspace/logs/fullrun_2026-10-04_B_results; tmux new-session -d -s fullrun-$SESSION \"cd /workspace/bachelorArbeit && bash scripts/fullrun_strict_session.sh $SESSION > /workspace/logs/fullrun_2026-10-04_B_results/${SESSION}_console.log 2>&1; read -r -p \\\"Session ended: STOP the Pod. Press Enter to close.\\\"\""
+```
+
+### 4. Single watch line (current log path, counter and GPU)
 
 ```bash
 set -euo pipefail
@@ -148,41 +158,51 @@ FETCH="$PWD/outputs"
 "${SSH[@]}" -tt "root@$IP" 'watch -n 10 "/workspace/venvs/venv_qwen/bin/python /workspace/bachelorArbeit/scripts/fullrun_monitor.py --gpu"'
 ```
 
-### 5. Verify strict, rescue and consolidated primary tables
+### 5. Verify strict results
 
-Wait until the session completes. The rescue already ran automatically in block 3; `--verify-only` performs no inference and checks every prefix. If interrupted, rerun block 3 after the old tmux session exits (use a new session name if it still exists). This resumes strict/rescue rather than launching another full run.
+Wait for completion. No rescue or extended inference is requested. Missing results fail verification. For laptop consolidation, first create `outputs/fullrun_2026-10-04_B_results/` and copy fetched model directories there with `rsync -rlt --ignore-existing FETCH/MODEL outputs/fullrun_2026-10-04_B_results/` (replace FETCH/MODEL with the actual directory); the strict table remains the headline until all four models have verified rescues.
 
 ```bash
 set -euo pipefail
 read -rp 'Current pod SSH IP: ' IP
 read -rp 'Current pod SSH port: ' PORT
+read -rp 'Completed session (S1 / S2 / S3): ' SESSION
+case "$SESSION" in S1) MODELS='llava';; S2) MODELS='qwen deepseek';; S3) MODELS='gemma';; *) exit 2;; esac
 SSH=(ssh -i "$HOME/.ssh/id_ed25519" -p "$PORT")
 RSYNC_SSH="ssh -i $HOME/.ssh/id_ed25519 -p $PORT"
 FETCH="$PWD/outputs"
-"${SSH[@]}" "root@$IP" 'cd /workspace/bachelorArbeit && /workspace/venvs/venv_qwen/bin/python scripts/verify_fullrun.py llava && /workspace/venvs/venv_qwen/bin/python scripts/fullrun_rescue.py llava --verify-only && /workspace/venvs/venv_qwen/bin/python scripts/fullrun_consolidate.py llava --output-dir outputs/fullrun_2026-10-04_B_consolidated'
+for MODEL in $MODELS; do
+  "${SSH[@]}" "root@$IP" "cd /workspace/bachelorArbeit && /workspace/venvs/venv_qwen/bin/python scripts/verify_fullrun.py $MODEL"
+done
 ```
 
-### 6. Fetch to a fresh directory
+### 6. Fetch all session outputs and logs to a fresh directory
+
+This includes predictions, actual token IDs, configs, contracts, statuses, preflight files and Gemma's fresh smoke/resume proof. Keep this directory; the CPU planner takes `--model-dir "$FETCH/MODEL"`. The full input tree is already on the laptop and its hashes are recorded in every contract.
 
 ```bash
 set -euo pipefail
 read -rp 'Current pod SSH IP: ' IP
 read -rp 'Current pod SSH port: ' PORT
+read -rp 'Completed session (S1 / S2 / S3): ' SESSION
+case "$SESSION" in S1) MODELS='llava';; S2) MODELS='qwen deepseek';; S3) MODELS='gemma';; *) exit 2;; esac
 SSH=(ssh -i "$HOME/.ssh/id_ed25519" -p "$PORT")
 RSYNC_SSH="ssh -i $HOME/.ssh/id_ed25519 -p $PORT"
-FETCH="$(mktemp -d "$PWD/outputs/fullrun_llava_fetch_XXXXXXXX")"
-rsync -rltvz --no-owner --no-group -e "$RSYNC_SSH" \
-  "root@$IP:/workspace/bachelorArbeit/outputs/fullrun_2026-10-04_B_results/llava" "$FETCH/"
-rsync -rltvz --no-owner --no-group -e "$RSYNC_SSH" \
-  "root@$IP:/workspace/bachelorArbeit/outputs/fullrun_2026-10-04_B_consolidated/llava" "$FETCH/consolidated/"
-rsync -rltvz --no-owner --no-group -e "$RSYNC_SSH" \
-  "root@$IP:/workspace/logs/fullrun_2026-10-04_B_results" "$FETCH/logs/"
-printf 'Fetched results: %s\n' "$FETCH"
+FETCH="$(mktemp -d "$PWD/outputs/fullrun_${SESSION}_fetch_XXXXXXXX")"
+for MODEL in $MODELS; do
+  rsync -rltvz --no-owner --no-group -e "$RSYNC_SSH" "root@$IP:/workspace/bachelorArbeit/outputs/fullrun_2026-10-04_B_results/$MODEL" "$FETCH/"
+done
+rsync -rltvz --no-owner --no-group -e "$RSYNC_SSH" "root@$IP:/workspace/logs/fullrun_2026-10-04_B_results" "$FETCH/logs/"
+if [[ "$SESSION" == S3 ]]; then
+  rsync -rltvz --no-owner --no-group -e "$RSYNC_SSH" "root@$IP:/workspace/bachelorArbeit/outputs/fullrun_2026-10-04_B_gemma_start_smoke" "$FETCH/"
+  rsync -rltvz --no-owner --no-group -e "$RSYNC_SSH" "root@$IP:/workspace/logs/fullrun_2026-10-04_B_gemma_start_smoke" "$FETCH/logs/"
+fi
+printf 'Fetched everything: %s\n' "$FETCH"
 ```
 
-### 7. Terminate the pod after successful fetch and review
+### 7. Terminate after successful fetch and review
 
-This last block is the user's explicit termination action. It requires an already authenticated current `runpodctl`; no API key is created. Confirm the pod ID and that `/workspace` is the retained network volume. `pod delete` terminates the pod; it does not delete a network volume. Syntax was checked against [Runpod's generated CLI documentation](https://github.com/runpod/runpodctl/blob/main/docs/runpodctl_pod_delete.md). If the CLI is unavailable, use the Runpod console's Terminate action; do not treat SSH shutdown as stopping billing.
+This is the user's explicit termination action, using an already authenticated `runpodctl`. No API keys are created. Confirm `/workspace` is the retained network volume. [Official CLI syntax](https://github.com/runpod/runpodctl/blob/main/docs/runpodctl_pod_delete.md): pod deletion terminates the pod; it does not delete the network volume. If unavailable, use the console Terminate action.
 
 ```bash
 set -euo pipefail

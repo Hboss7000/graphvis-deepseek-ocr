@@ -409,9 +409,6 @@ def main():
     for model in MODELS if args.model == 'all' else [args.model]:
         try:
             model_ok = run_model(args, model, deadline)
-            if model_ok and not args.smoke and not args.plan:
-                from fullrun_rescue import run_rescue
-                model_ok = run_rescue(args, model, deadline)
             ok = model_ok and ok
         except Exception as exc:
             print(f'FAILED {model} preflight: {exc}', flush=True)

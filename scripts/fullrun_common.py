@@ -71,7 +71,7 @@ def specs(root, model, smoke=False, data_name=DATA_NAME):
     metadata = prefix + '/test/graph_metadata_0_500.jsonl'
     meta = {r['statement_idx']: r for r in read_rows(root / metadata)}
     code_paths = sorted(set(
-        list((root / 'scripts').glob('fullrun_*.py'))
+        list((root / 'scripts').glob('fullrun_*.py')) + list((root / 'scripts').glob('fullrun_*.sh'))
         + [root / 'scripts/verify_fullrun.py', root / 'scripts/report_fullrun_probes.py', root / 'scripts/gemma3_common.py', root / 'scripts/llava_common.py',
            root / 'scripts/eval_gemma3_stage1.py', root / 'scripts/eval_gemma3_stage2.py']
         + list((root / S1).glob('*.py')) + list((root / QA).glob('*.py'))))
@@ -150,6 +150,18 @@ def validate_frozen_files(root, spec):
         path = root / name
         if not path.is_file() or sha(path) != expected:
             raise ValueError(f'Missing/changed input: {path}')
+
+
+def saved_spec(root, directory, current):
+    """Read an archived contract; experimental identity stays fixed, code may advance."""
+    config = json.loads((directory / 'run_config.json').read_text())
+    recorded = json.loads((directory / 'contract.json').read_text())
+    if config.get('fullrun') != recorded:
+        raise ValueError('Saved config/contract mismatch')
+    if {k:v for k,v in recorded.items() if k != 'code_files'} != {k:v for k,v in current.items() if k != 'code_files'}:
+        raise ValueError('Saved experimental settings differ (only code hashes may change)')
+    validate_frozen_files(root, {**recorded, 'code_files': {}})
+    return recorded
 
 
 def tripwire(rows, stage, reference, reading_probe=False):

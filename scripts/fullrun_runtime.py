@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import random
 from pathlib import Path
 import sys
 from time import perf_counter
@@ -59,6 +60,24 @@ def enrich_config(config):
             raise ValueError(f'Fullrun input mismatch: {key}')
     if spec.get('stage') == 'qa':
         config['parser_protocol'] = 'explicit_v1'
+        if spec.get('mode') == 'full':
+            torch = sys.modules.get('torch')
+            seed = config.setdefault('seed', spec.get('rescue', {}).get('strict_execution', {}).get('seed', 13))
+            random.seed(seed)
+            numpy = sys.modules.get('numpy')
+            if numpy is not None:
+                numpy.random.seed(seed)
+            if hasattr(torch, 'manual_seed'):
+                torch.manual_seed(seed)
+            # Recorded from the actual device, not inferred from a requirements file.
+            config['gpu_type'] = torch.cuda.get_device_name(0)
+            if 'RTX PRO 6000' not in config['gpu_type']:
+                raise ValueError('Full QA requires RTX PRO 6000')
+            source = spec.get('rescue', {}).get('strict_execution')
+            if source:
+                actual = {k:config.get(k) for k in source}
+                if actual != source:
+                    raise ValueError('Rescue seed/GPU/decoding differs from strict execution')
     config['fullrun'] = spec
     config.pop('source_image_generation_flags', None)
     config.pop('source_image_generation_flags_provenance', None)
@@ -87,6 +106,9 @@ def finish_item(row):
         if _generated_ids is None:
             raise ValueError('QA generation did not capture exact token IDs')
         row['generated_token_ids'] = _generated_ids
+        attempt = os.environ.get('FULLRUN_CODE_ATTEMPT')
+        if attempt:
+            row['code_attempt'] = {'path': 'code_attempts/' + Path(attempt).name, 'sha256': hashlib.sha256(Path(attempt).read_bytes()).hexdigest()}
     row['item_elapsed_seconds'] = perf_counter() - _started
     row['peak_memory_allocated_bytes'] = int(torch.cuda.max_memory_allocated())
 

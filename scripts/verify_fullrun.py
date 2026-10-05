@@ -3,7 +3,7 @@
 import argparse
 import json
 from pathlib import Path
-from fullrun_common import ROOT, DATA_NAME, MODELS, specs, verify_job, validate_frozen_files
+from fullrun_common import ROOT, DATA_NAME, MODELS, specs, verify_job, validate_frozen_files, saved_spec
 
 
 def verify_model(root, model, smoke=False):
@@ -12,7 +12,7 @@ def verify_model(root, model, smoke=False):
     report = {'model': model, 'mode': mode, 'jobs': [], 'errors': []}
     for spec in specs(root, model, smoke):
         try:
-            validate_frozen_files(root, spec)
+            spec = saved_spec(root, base / model / spec["label"], spec)
             result = verify_job(base / model / spec['label'], spec)
             status = base / model / 'status' / (spec['label'] + '.json')
             if not status.exists() or json.loads(status.read_text())['state'] != 'COMPLETED':

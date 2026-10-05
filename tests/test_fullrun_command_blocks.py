@@ -4,12 +4,14 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import pytest
 import sys
 
 ROOT=Path(__file__).resolve().parents[1]
 
 
-def test_all_first_session_blocks_run_independently_with_mock_transports(tmp_path):
+@pytest.mark.parametrize('session_name', ['S1','S2','S3'])
+def test_all_first_session_blocks_run_independently_with_mock_transports(tmp_path, session_name):
     scripts=tmp_path/'bin';scripts.mkdir();remote=tmp_path/'remote_workspace'
     repo=remote/'bachelorArbeit';(repo/'scripts').mkdir(parents=True)
     (repo/'scripts/fullrun_manual.sh').write_text('exit 0\n')
@@ -21,7 +23,7 @@ def test_all_first_session_blocks_run_independently_with_mock_transports(tmp_pat
     common='import os,sys,json,subprocess\nfrom pathlib import Path\nargs=sys.argv[1:]\nwith open(os.environ["MOCK_CALLS"],"a") as f:f.write(json.dumps([Path(sys.argv[0]).name,args])+"\\n")\n'
     tool('git',common+'\nif args[0]=="rev-parse":print("abc123")\nelif args[0]=="ls-remote":print("abc123\\trefs/heads/inference50-core-keep")\n')
     tool('ssh',common+'\ncommand=args[-1].replace("/workspace",os.environ["MOCK_WORKSPACE"])\nsubprocess.run(["bash","-n","-c",command],check=True)\nsubprocess.run(["bash","-c",command],check=True)\n')
-    tool('tmux',common+'\nsubprocess.run(["bash","-n","-c",args[-1]],check=True)\n# Do not start a detached job, but validate the final command after all SSH/tmux quoting.\nassert "MAX_HOURS=3.3 bash scripts/fullrun_manual.sh llava" in args[-1]\nassert "read -r -p \\\"Session ended:" in args[-1]\n')
+    tool('tmux',common+'\nsubprocess.run(["bash","-n","-c",args[-1]],check=True)\n# Do not start a detached job, but validate the final command after all SSH/tmux quoting.\nassert "bash scripts/fullrun_strict_session.sh S" in args[-1]\nassert "read -r -p \\\"Session ended:" in args[-1]\n')
     tool('watch',common+'\nassert "fullrun_monitor.py --gpu" in args[-1]\n')
     tool('rsync',common+'\n')
     tool('runpodctl',common+'\nassert args==["pod","delete","--help"] or args==["pod","delete","test-pod"]\n')
@@ -36,6 +38,7 @@ def test_all_first_session_blocks_run_independently_with_mock_transports(tmp_pat
         assert 'tail -F' not in block
         stdin='127.0.0.1\n22\n'
         if index==6:stdin+=str(tmp_path/'outputs')+'\ntest-pod\nTERMINATE test-pod\n'
+        if index in (2,4,5):stdin+=session_name+'\n'
         result=subprocess.run(['bash','-c',block],input=stdin,text=True,capture_output=True,cwd=tmp_path,env=env,timeout=10)
         assert result.returncode==0,(index+1,result.stdout,result.stderr)
     calls=[json.loads(line) for line in log.read_text().splitlines()]

@@ -154,6 +154,8 @@ def test_rescue_command_keeps_full_input_prompt_and_only_selects_capped(tmp_path
     monkeypatch.setattr(rescue,'verify_job',lambda *a:None)
     monkeypatch.setattr(rescue,'prediction_rows',lambda *a:rows)
     (strict/'predictions.jsonl').write_text(''.join(json.dumps(r)+'\n' for r in rows))
+    common.frozen_json(strict/'contract.json',s)
+    common.frozen_json(strict/'run_config.json',{'fullrun':s,'seed':13,'gpu_type':'NVIDIA RTX PRO 6000 Blackwell Server Edition','generation':{'do_sample':False,'num_beams':1,'max_new_tokens':64}})
     rescue_spec,originals=rescue.rescue_spec(tmp_path,'llava',s,strict,tmp_path/'rescue')
     assert rescue_spec['effective_max_new_tokens']==512
     assert rescue_spec['input_jsonl']=='all500.jsonl'
@@ -175,12 +177,18 @@ def test_strict_extended_merge_does_not_select_only_failed(monkeypatch,tmp_path)
     p=tmp_path/'outputs'/common.DATA_NAME/'test/graph_metadata_0_500.jsonl';p.parent.mkdir(parents=True)
     p.write_text(''.join(json.dumps(r)+'\n' for r in metadata))
     monkeypatch.setattr(consolidate,'verify_model',lambda *a:{'passed':True})
-    monkeypatch.setattr(consolidate,'verify_rescue',lambda *a:{})
+    monkeypatch.setattr(consolidate,'rescue_state',lambda root,model:{'complete':model=='llava','audit':{},'reason':None})
     report,versions=consolidate.consolidate_model(tmp_path,'llava')
-    assert report['primary']=='extended_512'
+    assert report['primary']=='strict_64'
+    assert report['extended_available'] is True
     assert report['versions']['strict_64']['conditions']['image']['accuracy']==1
     assert report['versions']['extended_512']['conditions']['image']['accuracy']==499/500
     assert versions['extended_512']['image'][0]['predicted_option']=='D'
+    monkeypatch.setattr(consolidate,'rescue_state',lambda *a:{'complete':False,'audit':None,'reason':'not run'})
+    absent,_=consolidate.consolidate_model(tmp_path,'llava')
+    assert absent['primary']=='strict_64'
+    assert absent['versions']['extended_512']['conditions']['image']['accuracy'] is None
+    assert absent['versions']['strict_64']['conditions']['image']['accuracy']==1
 
 
 def test_rescue_orchestration_all_conditions_resumes_and_audits_every_item(tmp_path,monkeypatch):
@@ -196,9 +204,15 @@ def test_rescue_orchestration_all_conditions_resumes_and_audits_every_item(tmp_p
         (directory/'predictions.jsonl').write_text(''.join(json.dumps(r)+'\n' for r in values))
         cfg={**{k:s[k] for k in ('model_id','model_revision','effective_max_new_tokens','prompt_bodies_sha256')},
              'generation':dict(do_sample=False,num_beams=1,max_new_tokens=64),'parser_protocol':'explicit_v1',
+             'seed':13,'gpu_type':'NVIDIA RTX PRO 6000 Blackwell Server Edition',
              'torch_version':s['versions']['torch'],'transformers_version':s['versions']['transformers'],'fullrun':s,
              'input_jsonl':{'sha256':common.sha(records)},'graph_metadata':{'sha256':common.sha(meta)}}
-        common.frozen_json(directory/'run_config.json',cfg);specs.append(s)
+        common.frozen_json(directory/'run_config.json',cfg)
+        old={**s,'code_files':{'deleted_old_code.py':'old-hash'}}
+        cfg['fullrun']=old
+        # Source commit has a different code manifest; its code need not exist now.
+        (directory/'run_config.json').write_text(json.dumps(cfg))
+        common.frozen_json(directory/'contract.json',old);specs.append(s)
     monkeypatch.setattr(rescue,'specs',lambda *args:[{}]+specs)
     monkeypatch.setattr(rescue,'hardware_preflight',lambda *args:None)
     calls=[]
@@ -220,12 +234,18 @@ def test_rescue_orchestration_all_conditions_resumes_and_audits_every_item(tmp_p
     assert rescue.run_rescue(args,'llava',time.monotonic()+10)
     report=json.loads((base/'rescue_512/prefix_report.json').read_text())
     assert len(calls)==4
+    saved=json.loads((base/'rescue_512/image/contract.json').read_text())
+    assert saved['code_files']=={}
+    assert saved['rescue']['strict_code_files']=={'deleted_old_code.py':'old-hash'}
     assert all(r['selected']==r['checked']==r['matched']==2 for r in report.values())
+    for s in specs:s['code_files']={'another_new_commit.py':'new-hash'}
     assert rescue.run_rescue(args,'llava',time.monotonic()+10)
-    assert len(calls)==4,'Completed rescues must not generate again'
+    assert len(calls)==4,'Completed rescues must not generate again, even on a newer commit'
+    attempt=json.loads((base/'rescue_512/code_attempts/attempt_0002.json').read_text())
+    assert attempt['code_files']=={'another_new_commit.py':'new-hash'}
 
 
-def test_llava_full_launcher_checks_only_llava_and_automatically_rescues(tmp_path,monkeypatch):
+def test_llava_full_launcher_checks_only_llava_and_never_rescues(tmp_path,monkeypatch):
     calls=[]
     monkeypatch.setattr(sys,'argv',['fullrun_session.py','llava','--root',str(tmp_path),'--workspace',str(tmp_path)])
     monkeypatch.setenv('TMUX','local-test')
@@ -236,10 +256,10 @@ def test_llava_full_launcher_checks_only_llava_and_automatically_rescues(tmp_pat
     monkeypatch.setattr(rescue,'run_rescue',lambda args,model,deadline:calls.append('rescue:'+model) or True)
     with pytest.raises(SystemExit) as exc:session.main()
     assert exc.value.code==0
-    assert calls==['gate:llava','full:llava','rescue:llava']
+    assert calls==['gate:llava','full:llava']
 
 
-def test_gemma_startup_smoke_then_own_gate_then_full_and_rescue(tmp_path,monkeypatch):
+def test_gemma_startup_smoke_then_own_gate_then_full_without_rescue(tmp_path,monkeypatch):
     calls=[]
     monkeypatch.setattr(sys,'argv',['fullrun_session.py','gemma','--root',str(tmp_path),'--workspace',str(tmp_path)])
     monkeypatch.setenv('TMUX','local-test')
@@ -260,4 +280,95 @@ def test_gemma_startup_smoke_then_own_gate_then_full_and_rescue(tmp_path,monkeyp
     monkeypatch.setattr(rescue,'run_rescue',lambda *args:calls.append('rescue') or True)
     with pytest.raises(SystemExit) as exc:session.main()
     assert exc.value.code==0
-    assert calls==['startup-smoke','own-gate','full','rescue']
+    assert calls==['startup-smoke','own-gate','full']
+
+
+def test_saved_contract_allows_new_code_but_rejects_changed_inputs(tmp_path):
+    source=tmp_path/'input';source.write_text('unchanged')
+    old=spec();old.update(input_files={'input':common.sha(source)},code_files={'old.py':'old-hash'})
+    directory=tmp_path/'strict';directory.mkdir()
+    common.frozen_json(directory/'contract.json',old)
+    common.frozen_json(directory/'run_config.json',{'fullrun':old})
+    current={**old,'code_files':{'new.py':'new-hash'}}
+    assert common.saved_spec(tmp_path,directory,current)==old
+    with pytest.raises(ValueError,match='experimental settings'):
+        common.saved_spec(tmp_path,directory,{**current,'model_revision':'another-revision'})
+    source.write_text('changed')
+    with pytest.raises(ValueError,match='Missing/changed input'):
+        common.saved_spec(tmp_path,directory,current)
+
+
+def test_headline_requires_all_four_rescued_even_for_one_model(monkeypatch,tmp_path):
+    finished={'llava','qwen','deepseek'}
+    monkeypatch.setattr(consolidate,'rescue_state',lambda root,m:{'complete':m in finished})
+    assert consolidate.headline_rule(tmp_path)[0]=='strict_64'
+    finished.add('gemma')
+    assert consolidate.headline_rule(tmp_path)[0]=='extended_512'
+
+
+def test_absent_optional_rescue_is_explicitly_unavailable(tmp_path):
+    state=consolidate.rescue_state(tmp_path,'llava')
+    assert state['complete'] is False and state['audit'] is None
+    assert consolidate.headline_rule(tmp_path)[0]=='strict_64'
+    assert not list(tmp_path.iterdir()),'Checking absent rescue must not create output directories'
+
+
+def test_planner_uses_actual_counts_and_measured_speed_not_512(tmp_path):
+    from fullrun_rescue_plan import plan
+    for condition in common.CONDITIONS:
+        directory=tmp_path/('qa_'+condition);directory.mkdir()
+        rows=[dict(statement_idx=i,raw_response='x'*250,generated_token_ids=list(range(64 if i<3 else 16)),
+                   item_elapsed_seconds=2,generation_elapsed_seconds=1,hit_token_ceiling=i<3) for i in range(4)]
+        (directory/'predictions.jsonl').write_text(''.join(json.dumps(r)+'\n' for r in rows))
+    report=plan('llava',tmp_path)
+    assert len(report['capped_examples'])==10
+    assert all(len(r['response_first_200'])==200 for r in report['capped_examples'])
+    c=report['conditions']['image']
+    assert c['capped_answers']==3
+    assert c['measured_tokens_per_second']==52
+    assert c['estimated_rescue_hours']==pytest.approx(192/52/3600)
+    assert c['estimated_rescue_cost_usd']==pytest.approx(c['estimated_rescue_hours']*2.09)
+    assert c['estimate_kind']=='observed token workload lower bound'
+    estimate=plan('llava',tmp_path,128)
+    assert estimate['conditions']['image']['estimated_rescue_hours']==pytest.approx(384/52/3600)
+
+
+def test_full_qa_runtime_records_seed_gpu_and_checks_rescue_execution(monkeypatch):
+    s=spec();s.update(mode='full',input_jsonl='input',graph_metadata='meta',input_files={'input':'a','meta':'b'},data_provenance={})
+    cfg={k:s[k] for k in ('model_id','model_revision','effective_max_new_tokens','prompt_bodies_sha256')}
+    cfg.update(generation=dict(do_sample=False,num_beams=1,max_new_tokens=64),
+               torch_version=s['versions']['torch'],transformers_version=s['versions']['transformers'],
+               input_jsonl={'sha256':'a'},graph_metadata={'sha256':'b'})
+    seeds=[]
+    torch=SimpleNamespace(manual_seed=seeds.append,cuda=SimpleNamespace(get_device_name=lambda i:'NVIDIA RTX PRO 6000 Blackwell Server Edition'))
+    monkeypatch.setitem(sys.modules,'torch',torch)
+    monkeypatch.setattr(runtime,'contract',lambda:s)
+    enriched=runtime.enrich_config(cfg)
+    assert enriched['seed']==13 and seeds==[13]
+    assert enriched['gpu_type']=='NVIDIA RTX PRO 6000 Blackwell Server Edition'
+    s['rescue']={'strict_execution':{'seed':13,'gpu_type':enriched['gpu_type'],'generation':cfg['generation']}}
+    assert runtime.enrich_config(cfg)['seed']==13
+    with pytest.raises(ValueError,match='Rescue seed/GPU/decoding'):
+        runtime.enrich_config({**cfg,'seed':42})
+    torch.cuda.get_device_name=lambda i:'NVIDIA H100'
+    with pytest.raises(ValueError,match='RTX PRO 6000'):
+        runtime.enrich_config(cfg)
+
+
+def test_strict_only_group_runs_s2_in_order_and_stops_on_failure(tmp_path):
+    import subprocess
+    scripts=tmp_path/'scripts';scripts.mkdir()
+    path=scripts/'fullrun_manual.sh'
+    path.write_text('printf "%s %s\\n" "$1" "$MAX_HOURS" >> calls\nif [[ "$1" == qwen && -f fail ]]; then exit 1; fi\n')
+    launcher=common.ROOT/'scripts/fullrun_strict_session.sh'
+    success=subprocess.run(['bash',str(launcher),'S2'],cwd=tmp_path,text=True,capture_output=True)
+    assert success.returncode==0
+    lines=(tmp_path/'calls').read_text().splitlines()
+    assert [line.split()[0] for line in lines]==['qwen','deepseek']
+    assert all(0<float(line.split()[1])<=3.36 for line in lines)
+    (tmp_path/'calls').unlink();(tmp_path/'fail').touch()
+    failed=subprocess.run(['bash',str(launcher),'S2'],cwd=tmp_path,text=True,capture_output=True)
+    assert failed.returncode!=0
+    assert (tmp_path/'calls').read_text().split()[0]=='qwen'
+    assert 'deepseek' not in (tmp_path/'calls').read_text()
+    assert 'STOP the Pod' in failed.stdout

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Strict-64 and primary extended QA tables, paired tests and fixed graph strata."""
+"""Strict-64 and optional extended QA tables, with a fixed all-four-model headline rule."""
 import argparse
 from collections import deque
 import json
@@ -65,27 +65,45 @@ def graph_strata(metadata):
                    'reachability':'undirected visible graph; any correct-option node reachable from any question node; overlap counts as reachable'}
 
 
+def rescue_state(root, model):
+    base=root/'outputs'/(DATA_NAME+'_results')/model/'rescue_512'
+    if not (base/'prefix_report.json').is_file():
+        return {'complete':False,'reason':'Optional rescue not completed','audit':None}
+    audit=verify_rescue(root,model)
+    complete=set(audit)==set(CONDITIONS) and all(r['checked']==r['selected'] and r['mismatches']==0 for r in audit.values())
+    return {'complete':complete,'reason':None if complete else 'Prefix mismatches require review','audit':audit}
+
+
+def headline_rule(root):
+    states={m:rescue_state(root,m) for m in MODELS}
+    return ('extended_512' if all(s['complete'] for s in states.values()) else 'strict_64'),states
+
+
 def consolidate_model(root,model,expected_count=500):
     if expected_count==500:
         verified=verify_model(root,model)
         if not verified['passed']:raise ValueError('Full strict verification failed: '+str(verified['errors']))
-    audit=verify_rescue(root,model)
+    primary,states=headline_rule(root)
+    state=states[model]
+    audit=state["audit"]
     base=root/'outputs'/(DATA_NAME+'_results')/model
     versions={'strict_64':{},'extended_512':{}}
     for condition in CONDITIONS:
         original=parsed_rows(read_rows(base/('qa_'+condition)/'predictions.jsonl'))
         if set(original)!=set(range(expected_count)):raise ValueError('Expected exact QA coverage')
-        replacements=parsed_rows(read_rows(base/'rescue_512'/condition/'predictions.jsonl'))
+        replacements=parsed_rows(read_rows(base/'rescue_512'/condition/'predictions.jsonl')) if state['complete'] else {}
         wanted={i for i,r in original.items() if r['hit_token_ceiling']}
-        if set(replacements)!=wanted:raise ValueError('Extended replacements must equal all capped strict items')
+        if state['complete'] and set(replacements)!=wanted:raise ValueError('Extended replacements must equal all capped strict items')
         versions['strict_64'][condition]=original
-        versions['extended_512'][condition]={i:replacements.get(i,r) for i,r in original.items()}
+        versions['extended_512'][condition]={i:replacements.get(i,r) for i,r in original.items()} if state['complete'] else {}
     metadata={r['statement_idx']:r for r in read_rows(root/'outputs'/DATA_NAME/'test/graph_metadata_0_500.jsonl')}
     strata,definitions=graph_strata(metadata)
-    report={'model':model,'primary':'extended_512','parser':'explicit_v1','rescue_audit':audit,
+    report={'model':model,'primary':primary,'headline_rule':'extended only when all four models have completed verified rescues; otherwise strict-64',
+            'all_model_rescue_states':states,'extended_available':state['complete'],
+            'extended_note':None if state['complete'] else 'Unavailable: no complete verified rescue for this model; extended metrics are null, never copied from strict results.', 'parser':'explicit_v1','rescue_audit':audit,
             'deepseek_ceiling_detection_approximate':model=='deepseek','strata_definitions':definitions,'versions':{}}
     for label,conditions in versions.items():
-        value={'conditions':{c:metrics(list(rows.values())) for c,rows in conditions.items()},
+        value={'available':label=='strict_64' or state['complete'],'conditions':{c:metrics(list(rows.values())) for c,rows in conditions.items()},
                'paired_image_vs_text':{c:paired(conditions['image'],conditions[c]) for c in CONDITIONS if c!='image'},'strata':{}}
         for kind in ('reachable','node_tercile'):
             for group in ((False,True) if kind=='reachable' else ('low','middle','high')):
