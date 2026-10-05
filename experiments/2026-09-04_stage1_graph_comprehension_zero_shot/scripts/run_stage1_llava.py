@@ -280,6 +280,7 @@ def main() -> None:
             if (idx, task) in done:
                 continue
             begin_item()
+            item_started = perf_counter()
             image_path = args.image_root / record["image"]
             with Image.open(image_path) as opened:
                 image = opened.convert("RGB")
@@ -293,6 +294,8 @@ def main() -> None:
                 )
             result = make_result(record, *values, metadata_by_idx[idx], args)
             finish_item(result)
+            if args.prompt_template != "hf-chat" or args.assistant_prefix_mode != "none":
+                result["item_elapsed_seconds"] = perf_counter() - item_started
             handles[task].write(json.dumps(result, ensure_ascii=False) + "\n")
             handles[task].flush()
             done.add((idx, task))
