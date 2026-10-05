@@ -173,11 +173,23 @@ def watch_job(cmd, directory, spec, log, deadline, poll_seconds=1, stall_seconds
     started = last_growth
     reason, state = None, 'FAILED'
     log.parent.mkdir(parents=True, exist_ok=True)
+    monitor_path = os.environ.get('FULLRUN_MONITOR_PATH')
+    def update_monitor(state):
+        if not monitor_path:
+            return
+        path = Path(monitor_path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        payload = {'model':spec['model'], 'job':spec['label'], 'state':state,
+                   'log_path':str(log), 'completed':sum(len(prediction_rows(t,spec,growing=True)) for t in targets),
+                   'expected':spec['record_count'] * len(targets), 'token_cap':spec['effective_max_new_tokens']}
+        temp=path.with_suffix('.tmp');temp.write_text(json.dumps(payload));temp.replace(path)
+    update_monitor('STARTING')
     with log.open('a', buffering=1) as handle:
         handle.write('\nLaunch: ' + shlex.join(cmd) + '\n')
         process = subprocess.Popen(cmd, stdout=handle, stderr=subprocess.STDOUT, env=env, start_new_session=True)
         try:
             while True:
+                update_monitor('RUNNING')
                 now = time.monotonic()
                 if now >= deadline:
                     state, reason = 'PAUSED', 'MAX_HOURS reached'
@@ -217,6 +229,7 @@ def watch_job(cmd, directory, spec, log, deadline, poll_seconds=1, stall_seconds
         except BaseException:
             stop_process(process)
             raise
+    update_monitor(state)
     return {'state': state, 'reason': reason, 'wall_seconds': time.monotonic() - started,
             'exit_code': process.returncode, 'command': cmd}
 
@@ -232,11 +245,24 @@ def record_status(path, status):
     print(f'{status["state"]}: {path.stem}: {status.get("reason") or "job finished"}. STOP the Pod when your session ends; billing continues.', flush=True)
 
 
+def write_resume_proof(directory, spec):
+    """Write resume evidence before any quality tripwire can reject the completed rows."""
+    first = json.loads((directory / 'resume_first3.json').read_text())['rows']
+    rows = prediction_rows(directory, spec)
+    validate_rows(rows, spec, complete=True)
+    if len(first) != 3 or len(rows) != 5 or rows[:3] != first:
+        raise ValueError('Resume modified the original three predictions or has wrong counts')
+    frozen_json(directory / 'resume_verified.json', {'first_count':3, 'final_count':5,
+                'first3_sha256':sha(directory / 'resume_first3.json'),
+                'predictions_sha256':sha(directory / 'predictions.jsonl')})
+
+
 def run_model(args, model, deadline):
     jobs = getattr(args, 'recovery_jobs', {}).get(model, specs(args.root, model, args.smoke))
     auxiliary = [] if getattr(args, 'recovery_jobs', None) is not None else auxiliary_specs(args.root, model, args.smoke)
     sequence = auxiliary + jobs if model == 'gemma' else jobs + auxiliary
     mode = 's0b' if getattr(args, 'recovery_jobs', None) is not None else ('smoke' if args.smoke else 'results')
+    mode = getattr(args, 'mode_override', mode)
     base = args.root / 'outputs' / (DATA_NAME + '_' + mode) / model
     log_root = args.workspace / 'logs' / (DATA_NAME + '_' + mode) / model
     if args.plan:
@@ -305,6 +331,8 @@ def run_model(args, model, deadline):
                         continue
                     cmd = command(args.root, args.workspace, spec, directory, report, limit)
                     status = watch_job(cmd, directory, spec, log_root / (spec['label'] + '.log'), deadline)
+                    if limit == 5 and len(prediction_rows(directory,spec)) == 5:
+                        write_resume_proof(directory,spec)
                     if status['state'] != 'COMPLETED':
                         break
                     if limit == 3:
@@ -315,15 +343,9 @@ def run_model(args, model, deadline):
                             raise ValueError('Resume rehearsal first leg must contain exactly first three rows')
                         frozen_json(directory / 'resume_first3.json', {'rows': rows, 'command': cmd})
                     elif spec['label'] != 'preflight':
-                        verify_job(directory, spec)
                         if limit == 5:
-                            first = json.loads((directory / 'resume_first3.json').read_text())['rows']
-                            all_rows = prediction_rows(directory, spec)
-                            if all_rows[:3] != first:
-                                raise ValueError('Resume modified the original three predictions')
-                            frozen_json(directory / 'resume_verified.json', {'first_count': 3, 'final_count': 5,
-                                        'first3_sha256': sha(directory / 'resume_first3.json'),
-                                        'predictions_sha256': sha(directory / 'predictions.jsonl')})
+                            write_resume_proof(directory, spec)
+                        verify_job(directory, spec)
                 record_status(status_file, status)
                 if status['state'] == 'PAUSED':
                     print('PAUSED - resume by rerunning the same command', flush=True)
@@ -345,6 +367,8 @@ def main():
     p.add_argument('--smoke', action='store_true')
     p.add_argument('--plan', action='store_true', help='CPU-only command preview; no GPU imports or launches')
     p.add_argument('--max-hours', type=float, default=4)
+    p.add_argument('--smoke-root', type=Path, help='Historical S0 evidence root')
+    p.add_argument('--s0b-root', type=Path, help='Historical session 0b evidence root')
     args = p.parse_args()
     args.root = args.root.resolve()
     if not math.isfinite(args.max_hours) or args.max_hours <= 0:
@@ -360,18 +384,35 @@ def main():
             if os.environ.get(name):
                 raise ValueError(f'Unexpected inherited experiment override: {name}')
         os.environ.update(HF_HOME=str(args.workspace / '.cache/huggingface'), HF_HUB_OFFLINE='1', TRANSFORMERS_OFFLINE='1')
+        os.environ['FULLRUN_MONITOR_PATH'] = str(args.workspace / 'logs/fullrun_current_job.json')
         gpu_lock = (args.workspace / '.fullrun_gpu.lock').open('a')
         fcntl.flock(gpu_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        if not args.smoke:
-            from fullrun_summary import rehearsal_report
-            gate = rehearsal_report(args.root)
-            if not gate['passed']:
-                raise ValueError('Full run requires complete four-model rehearsal and reading-probe gate')
     deadline = time.monotonic() + args.max_hours * 3600
+    if not args.plan and not args.smoke:
+        from fullrun_gate import model_gate, evidence_roots
+        gemma_smoke = None
+        if args.model == 'gemma':
+            smoke, _ = evidence_roots(args.root, args.smoke_root, args.s0b_root)
+            fresh = copy.copy(args)
+            fresh.smoke = True
+            fresh.recovery_jobs = {'gemma': specs(args.root, 'gemma', True)[1:]}
+            fresh.mode_override = 'gemma_start_smoke'
+            fresh.gemma_preflight = smoke / 'gemma/preflight/preflight_report.json'
+            if not run_model(fresh, 'gemma', deadline):
+                raise ValueError('Gemma startup five-question smoke failed; STOP the Pod')
+            gemma_smoke = args.root / 'outputs' / (DATA_NAME + '_gemma_start_smoke')
+        gate = model_gate(args.root, args.model, args.smoke_root, args.s0b_root, gemma_smoke)
+        print('Per-model full gate: ' + json.dumps({k:v for k,v in gate.items() if k!='probe'}), flush=True)
+        if not gate['passed']:
+            raise ValueError(f'{args.model} full gate failed: {gate["errors"]}; STOP the Pod')
     ok = True
     for model in MODELS if args.model == 'all' else [args.model]:
         try:
-            ok = run_model(args, model, deadline) and ok
+            model_ok = run_model(args, model, deadline)
+            if model_ok and not args.smoke and not args.plan:
+                from fullrun_rescue import run_rescue
+                model_ok = run_rescue(args, model, deadline)
+            ok = model_ok and ok
         except Exception as exc:
             print(f'FAILED {model} preflight: {exc}', flush=True)
             ok = False

@@ -6,7 +6,7 @@ from __future__ import annotations
 import sys as _fullrun_sys
 from pathlib import Path as _FullrunPath
 _fullrun_sys.path.insert(0, str(_FullrunPath(__file__).resolve().parents[3] / "scripts"))
-from fullrun_runtime import enrich_config, begin_item, finish_item
+from fullrun_runtime import enrich_config, begin_item, finish_item, selected_records, capture_token_ids
 
 import argparse
 import difflib
@@ -61,6 +61,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--preview-only", action="store_true")
     parser.add_argument("--approve-prompt-diff", action="store_true")
+    parser.add_argument("--only-indices-json", type=Path, help="Rescue selection; complete input/config identity remains fixed")
     return parser.parse_args()
 
 
@@ -330,6 +331,7 @@ def infer_one(model, processor, prompt_text: str, image, args, torch):
             max_new_tokens=args.max_new_tokens,
         )
     generated = output_ids[:, input_length:]
+    capture_token_ids(generated)
     generated_tokens = int(generated.shape[1])
     response = processor.batch_decode(
         generated,
@@ -518,6 +520,7 @@ def main() -> None:
         first_image_budget,
     )
 
+    records = selected_records(records, args)
     parse_tier_counts = Counter()
     if args.resume and args.output_jsonl.exists():
         parse_tier_counts.update(

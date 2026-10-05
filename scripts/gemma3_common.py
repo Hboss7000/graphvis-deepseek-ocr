@@ -6,6 +6,8 @@ No Qwen dynamic-resolution control has a Gemma equivalent.
 """
 from __future__ import annotations
 
+from fullrun_runtime import capture_token_ids
+
 import argparse
 import inspect
 import json
@@ -224,6 +226,7 @@ def infer_one(model, processor, body, condition, image, args, torch, details):
                              **({} if args.cache_implementation == 'dynamic'
                                 else {'cache_implementation': args.cache_implementation}))
     generated = out[0][input_len:]
+    capture_token_ids(generated)
     response = processor.decode(generated, skip_special_tokens=True).strip()
     generated_count = int(generated.shape[-1])
     return (response, generated_count, generated_count >= args.max_new_tokens,

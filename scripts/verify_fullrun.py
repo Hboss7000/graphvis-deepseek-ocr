@@ -38,6 +38,8 @@ def print_table(report):
               f'{job["seconds_per_item"]:9.3f} {job["peak_vram_bytes"]/1024**3:10.2f}')
         if job['parse_tiers']:
             print('  parse tiers: ' + json.dumps(job['parse_tiers'], sort_keys=True))
+        if job.get('ceilings_per_task'):
+            print('  ceilings per task: ' + json.dumps(job['ceilings_per_task'],sort_keys=True))
         if job['legibility_confounded']:
             print('  Gemma: legibility-confounded (failed preflight recorded)')
     for error in report['errors']:

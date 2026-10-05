@@ -16,7 +16,7 @@ from __future__ import annotations
 import sys as _fullrun_sys
 from pathlib import Path as _FullrunPath
 _fullrun_sys.path.insert(0, str(_FullrunPath(__file__).resolve().parents[3] / "scripts"))
-from fullrun_runtime import enrich_config, begin_item, finish_item
+from fullrun_runtime import enrich_config, begin_item, finish_item, selected_records, capture_token_ids
 
 import argparse
 import difflib
@@ -100,6 +100,7 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Confirm that the printed prompt diff was reviewed and permit inference",
     )
+    parser.add_argument("--only-indices-json", type=Path, help="Rescue selection; complete input/config identity remains fixed")
     return parser.parse_args()
 
 
@@ -403,7 +404,11 @@ def main() -> None:
         @wraps(original_generate)
         def capped_generate(*generate_args, **generate_kwargs):
             generate_kwargs["max_new_tokens"] = args.max_new_tokens
-            return original_generate(*generate_args, **generate_kwargs)
+            result = original_generate(*generate_args, **generate_kwargs)
+            inputs = generate_kwargs.get('input_ids', generate_args[0] if generate_args else None)
+            if inputs is None: raise ValueError('Cannot capture DeepSeek input length')
+            capture_token_ids(result[0, inputs.shape[-1]:])
+            return result
 
         model.generate = capped_generate
 
@@ -455,6 +460,7 @@ def main() -> None:
             args, transformers.__version__, torch.__version__, effective_max_new_tokens
         )
 
+    records = selected_records(records, args)
     parse_tier_counts = Counter()
     if args.resume and args.output_jsonl.exists():
         parse_tier_counts.update(

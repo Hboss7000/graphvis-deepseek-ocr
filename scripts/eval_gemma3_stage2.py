@@ -6,7 +6,7 @@ from __future__ import annotations
 import sys as _fullrun_sys
 from pathlib import Path as _FullrunPath
 _fullrun_sys.path.insert(0, str(_FullrunPath(__file__).resolve().parents[1] / "scripts"))
-from fullrun_runtime import enrich_config, begin_item, finish_item
+from fullrun_runtime import enrich_config, begin_item, finish_item, selected_records
 
 import argparse
 import difflib
@@ -55,6 +55,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--preview-only", action="store_true")
     parser.add_argument("--approve-prompt-diff", action="store_true")
     gemma.add_common_args(parser)
+    parser.add_argument("--only-indices-json", type=Path, help="Rescue selection; complete input/config identity remains fixed")
     return parser.parse_args()
 
 
@@ -228,6 +229,7 @@ def main() -> None:
         preflight_provenance,
     )
 
+    records = selected_records(records, args)
     parse_tier_counts = Counter()
     if args.resume and args.output_jsonl.exists():
         parse_tier_counts.update(

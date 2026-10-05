@@ -6,7 +6,7 @@ from __future__ import annotations
 import sys as _fullrun_sys
 from pathlib import Path as _FullrunPath
 _fullrun_sys.path.insert(0, str(_FullrunPath(__file__).resolve().parents[3] / "scripts"))
-from fullrun_runtime import enrich_config, begin_item, finish_item
+from fullrun_runtime import enrich_config, begin_item, finish_item, selected_records, capture_token_ids
 
 import argparse
 import json
@@ -65,6 +65,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--preview-only", action="store_true")
     parser.add_argument("--approve-prompt-diff", action="store_true")
+    parser.add_argument("--only-indices-json", type=Path, help="Rescue selection; complete input/config identity remains fixed")
     return parser.parse_args()
 
 
@@ -94,6 +95,7 @@ def infer_one(model, processor, prompt_text, image, args, torch):
     elapsed = perf_counter() - started
     peak = int(torch.cuda.max_memory_allocated())
     generated = output_ids[0, input_length:]
+    capture_token_ids(generated)
     count = int(generated.shape[-1])
     response = processor.decode(generated, skip_special_tokens=True).strip()
     return response, count, count >= args.max_new_tokens, vision_tokens, elapsed, peak
@@ -219,6 +221,7 @@ def main() -> None:
             encoding="utf-8",
         )
 
+    records = selected_records(records, args)
     tiers = Counter()
     if args.resume and args.output_jsonl.exists():
         tiers.update(row.get("parse_tier", "MISSING") for row in read_jsonl(args.output_jsonl))

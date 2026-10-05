@@ -16,7 +16,8 @@ from fullrun_snapshot_imports import snapshot_imports
 from report_fullrun_probes import paired_report
 
 FETCH=ROOT/'outputs/fullrun_fetch_20261004_183521.qtJrSg/fullrun_2026-10-04_B_smoke'
-CORPUS=sorted((ROOT/'outputs/phase1_dryrun').rglob('run_config.json'))+sorted(FETCH.rglob('run_config.json'))
+CORPUS=(sorted((ROOT/'outputs/phase1_dryrun').rglob('run_config.json'))+sorted(FETCH.rglob('run_config.json'))
+        +sorted((ROOT/'outputs/fullrun_s0b_fetch_jcjYPY6T/fullrun_2026-10-04_B_s0b').rglob('run_config.json')))
 
 @pytest.mark.parametrize('path',CORPUS,ids=lambda p:str(p.relative_to(ROOT)))
 def test_every_real_config_enriches(path,tmp_path,monkeypatch):

@@ -150,19 +150,29 @@ def completed_indices(path: Path) -> set[int]:
     return set(indices)
 
 
+PARSER_PROTOCOL = "explicit_v1"
+
+
 def parse_answer(pred_text: str, n_choices: int) -> tuple[str, str]:
-    """Return the parsed option and the tier that accepted the response."""
+    """Accept a sole option or an unambiguous explicit answer; never infer from mentions."""
     opts = OPTIONS[:n_choices]
-    if pred_text in opts:
-        return pred_text, "exact"
-    if len(pred_text) >= 3 and pred_text[0] in opts and pred_text[1:3] == ". ":
-        return pred_text[0], "option_prefix"
-    res = re.compile(r"The answer is ([A-Z]).").findall(pred_text)
-    if len(res) == 1:
-        return res[0], "the_answer_is"
-    standalone = re.findall(r"\b([A-D])\b", pred_text)
-    if standalone:
-        return standalone[-1], "standalone_fallback"
+    text = pred_text.strip()
+    if text in opts:
+        return text, "exact"
+    sole = re.fullmatch(r"[\(\[]?([A-D])[\)\]]?[.!]?", text)
+    if sole and sole[1] in opts:
+        return sole[1], "sole_letter"
+    # A single option-label/choice line remains a short answer, not a prose mention.
+    short = re.fullmatch(r"([A-D])\. +[^\n.!?]+[.!?]?", text)
+    if short and short[1] in opts and not re.search(r"\b[A-D]\b", text[3:]):
+        return short[1], "option_prefix"
+    explicit = re.findall(
+        r"(?:\b(?:correct\s+)?answer\s+is\s*|\bcorrect\s+answer\s*:\s*)"
+        r"(?:\*\*)?[\(\[]?((?-i:[A-D]))(?=[\s\)\]\*.,:;!?]|$)", text, re.IGNORECASE)
+    bold = re.findall(r"\*\*\s*[\(\[]?([A-D])[\)\]]?[.!]?\s*\*\*", text)
+    choices = set(explicit if explicit else bold)
+    if len(choices) == 1 and choices <= set(opts):
+        return choices.pop(), "explicit_answer" if explicit else "bold_letter"
     return "FAILED", "FAILED"
 
 

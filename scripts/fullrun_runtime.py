@@ -8,6 +8,7 @@ import sys
 from time import perf_counter
 
 _started = None
+_generated_ids = None
 
 
 def generation_settings(config):
@@ -56,6 +57,8 @@ def enrich_config(config):
     for key in ('input_jsonl', 'graph_metadata'):
         if config[key]['sha256'] != spec['input_files'][spec[key]]:
             raise ValueError(f'Fullrun input mismatch: {key}')
+    if spec.get('stage') == 'qa':
+        config['parser_protocol'] = 'explicit_v1'
     config['fullrun'] = spec
     config.pop('source_image_generation_flags', None)
     config.pop('source_image_generation_flags_provenance', None)
@@ -65,7 +68,8 @@ def enrich_config(config):
 
 
 def begin_item():
-    global _started
+    global _started, _generated_ids
+    _generated_ids = None
     if not os.environ.get('FULLRUN_CONTRACT'):
         return
     torch = sys.modules['torch']
@@ -79,5 +83,32 @@ def finish_item(row):
         return
     torch = sys.modules['torch']
     torch.cuda.synchronize()
+    if contract().get('stage') == 'qa':
+        if _generated_ids is None:
+            raise ValueError('QA generation did not capture exact token IDs')
+        row['generated_token_ids'] = _generated_ids
     row['item_elapsed_seconds'] = perf_counter() - _started
     row['peak_memory_allocated_bytes'] = int(torch.cuda.max_memory_allocated())
+
+
+def capture_token_ids(ids):
+    """Record the actual generate suffix, including special tokens; no retokenization."""
+    global _generated_ids
+    spec = contract()
+    if spec and spec.get('stage') == 'qa':
+        _generated_ids = ids.detach().cpu().tolist()
+        if _generated_ids and isinstance(_generated_ids[0], list):
+            if len(_generated_ids) != 1: raise ValueError('QA must remain batch size one')
+            _generated_ids = _generated_ids[0]
+
+
+def selected_records(records, args):
+    path = getattr(args, 'only_indices_json', None)
+    if path is None: return records
+    indices = json.loads(path.read_text())
+    if not isinstance(indices,list) or any(type(i) is not int for i in indices) or len(set(indices)) != len(indices):
+        raise ValueError('Rescue indices must be a unique integer list')
+    wanted = set(indices)
+    if not wanted <= {int(r['statement_idx']) for r in records}:
+        raise ValueError('Rescue selection contains unknown records')
+    return [r for r in records if int(r['statement_idx']) in wanted]

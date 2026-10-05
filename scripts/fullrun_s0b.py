@@ -89,54 +89,11 @@ def proof(directory):
 
 
 def gate(root, source):
-    base = root / 'outputs' / (DATA_NAME + '_s0b')
-    report = {'models':{}, 'errors':[], 'probe':{}, 'passed':False}
-    try:
-        entries = reused(root, source)
-        if json.loads((base / 'reuse_manifest.json').read_text()) != entries:
-            raise ValueError('Historical reuse evidence or current recovery code changed')
-    except (OSError, ValueError, KeyError, TypeError) as exc:
-        report['errors'].append('Reuse: '+str(exc))
-    for model in MODELS:
-        model_report = {'model':model,'mode':'s0b','jobs':[],'errors':[]}
-        report['models'][model] = model_report
-        for spec in specs(root, model, True):
-            directory = (source if model == 'llava' or (model in ('qwen','gemma') and spec['label']=='stage1') else base) / model / spec['label']
-            try:
-                actual = historical_spec(directory, spec) if directory.is_relative_to(source) else spec
-                validate_frozen_files(root, dict(actual, code_files={} if directory.is_relative_to(source) else actual['code_files']))
-                model_report['jobs'].append(verify_job(directory, actual))
-                if json.loads((directory.parent / 'status' / (spec['label']+'.json')).read_text())['state'] != 'COMPLETED':
-                    raise ValueError(f'Incomplete status: {directory}')
-            except (OSError, ValueError, KeyError, TypeError) as exc:
-                model_report['errors'].append(spec['label']+': '+str(exc))
-        try:
-            proof((source if model == 'llava' else base) / model / 'qa_image')
-        except (OSError, ValueError, KeyError, TypeError) as exc:
-            model_report['errors'].append('Resume: '+str(exc))
-        model_report['passed'] = not model_report['errors']
-        report['errors'].extend(model+': '+e for e in model_report['errors'])
-        if len(model_report['jobs']) == 5:
-            counts = specs(root,model,False)
-            seconds = sum(j['seconds_per_item'] * s['record_count'] for j,s in zip(model_report['jobs'],counts))
-            model_report['estimate'] = {'inference_hours':seconds/3600,'with_50_percent_margin_hours':seconds/2400,'with_50_percent_margin_cost_usd':seconds/2400*2.09}
-    try:
-        arms = {}
-        for spec in probe_specs(root):
-            directory = base / 'llava' / spec['label']
-            validate_frozen_files(root,spec)
-            verify_job(directory,spec)
-            if json.loads((base/'llava/status'/(spec['label']+'.json')).read_text())['state'] != 'COMPLETED':
-                raise ValueError('Incomplete 50-graph reading arm')
-            arms[spec['label'][6:-2]] = directory / 'predictions_llava_node_description.jsonl'
-        report['probe'] = paired_report(root/INPUTS/'reading_probe50.jsonl', root/'outputs'/DATA_NAME/'test/graph_metadata_0_500.jsonl',
-                                        {a:arms[a] for a in ('uniform','legacy','white')},50)
-        if not report['probe']['gate']['passed']:
-            report['errors'].append('Uniform blue basic recall drop exceeds 0.05. Wait for Henrique’s decision; do not choose white automatically.')
-    except (OSError, ValueError, KeyError, TypeError) as exc:
-        report['errors'].append('Reading probes: '+str(exc))
-    report['passed'] = not report['errors']
-    return report
+    from fullrun_gate import model_gate
+    reports={m:model_gate(root,m,smoke_root=source) for m in MODELS}
+    errors=[m+': '+e for m,r in reports.items() for e in r['errors']]
+    return {'models':reports,'errors':errors,'probe':reports['llava']['probe'],
+            'passed':not errors,'gate_scope':'per model; aggregate is a report only, never a launch prerequisite'}
 
 
 def main():
