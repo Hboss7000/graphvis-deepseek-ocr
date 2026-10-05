@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CPU preparation and guarded, resumable LLaVA Stage 1 diagnostic pilots."""
+"""CPU preparation and guarded, resumable LLaVA Stage 1 diagnostic arms."""
 from __future__ import annotations
 import argparse
 import fcntl
@@ -23,7 +23,8 @@ RUNNER = 'experiments/2026-09-04_stage1_graph_comprehension_zero_shot/scripts/ru
 NUMERIC_TASKS = ('node_number', 'edge_number', 'node_degree', 'highest_node_degree')
 ARMS = {'P1': ('hf-chat','gold-template'), 'P2': ('llava_v1','none'), 'P3': ('llava_v1','gold-template')}
 VERSIONS = {'torch': '2.8.0+cu128', 'transformers': '5.16.1'}
-PHASES = {'pilot-dry': (2, NUMERIC_TASKS), 'pilot': (20, NUMERIC_TASKS)}
+PHASES = {'pilot-dry': (2, NUMERIC_TASKS), 'pilot': (20, NUMERIC_TASKS),
+          'full-dry': (1, TASK_SETS['extended']), 'full': (100, TASK_SETS['extended'])}
 
 
 def row_keys(rows):
@@ -88,9 +89,11 @@ def prepare(root, measurements_dir=None):
         wanted=set(indices[:graphs])
         selected=[r for r in source if r['statement_idx'] in wanted and r['task_type'] in tasks]
         data=''.join(json.dumps(r,ensure_ascii=False)+'\n' for r in selected)
-        path=base/'inputs'/(phase+'.jsonl');path.parent.mkdir(parents=True,exist_ok=True)
-        if path.exists() and path.read_text()!=data:raise ValueError('Diagnostic input collision')
-        if not path.exists():path.write_text(data)
+        path=source_path if phase=='full' else base/'inputs'/(phase+'.jsonl')
+        if phase!='full':
+            path.parent.mkdir(parents=True,exist_ok=True)
+            if path.exists() and path.read_text()!=data:raise ValueError('Diagnostic input collision')
+            if not path.exists():path.write_text(data)
         name=str(path.relative_to(root));files[name]=sha(path)
         phases[phase]={'input_jsonl':name,'record_count':len(selected),'graphs':graphs,'tasks':list(tasks),
                        'indices':sorted(wanted),'expected_keys':[list(k) for k in row_keys(selected)],
@@ -102,7 +105,7 @@ def prepare(root, measurements_dir=None):
               'arms':{a:dict(prompt_template=t,assistant_prefix_mode=p) for a,(t,p) in ARMS.items()},
               'main_user_turn_text_sha256':prompt_bodies_sha256(source,'none'),
               'main_user_turn_hashes':user_turn_hashes(source),'speed_evidence':speeds,
-              'selection':'Lowest 20 statement indices of the frozen 100-graph main subset; dry run uses the first two.',
+              'selection':'Pilot: lowest 20 main-subset statement indices, dry first two. Full: original 100 graphs/all nine tasks; dry first graph.',
               'image_settings':'Same pinned LLaVA-NeXT default anyres processor and images as the main run; no rendering.'}
     frozen_json(base/'manifest.json',manifest)
     return manifest
@@ -116,7 +119,12 @@ def load_manifest(root):
         raise ValueError('Diagnostic manifest experimental drift')
     if manifest['versions'] != VERSIONS:raise ValueError('Diagnostic manifest version drift')
     validate_frozen_files(root,{'input_files':manifest['files']})
+    if set(manifest['phases'])!=set(PHASES):raise ValueError('Diagnostic phase drift')
+    main_indices=sorted({int(k.split(':')[0]) for k in manifest['main_user_turn_hashes']})
     for phase,spec in manifest['phases'].items():
+        graphs,tasks=PHASES[phase]
+        if spec['graphs']!=graphs or spec['tasks']!=list(tasks) or spec['indices']!=main_indices[:graphs]:
+            raise ValueError('Diagnostic selection drift')
         rows=read_rows(root/spec['input_jsonl'])
         if len(rows)!=spec['record_count'] or set(row_keys(rows))!={tuple(k) for k in spec['expected_keys']}:
             raise ValueError('Diagnostic input coverage drift')
@@ -142,13 +150,18 @@ def command(root,workspace,manifest,phase,arm):
          '--expected-count',str(spec['record_count']),'--expected-split','test','--task-set','extended',
          '--extractor','span_extended','--answer-format','none','--seed','13','--max-new-tokens','1024',
          '--prompt-template',template,'--assistant-prefix-mode',prefix,'--approve-prompts','--resume']
-    cmd+=['--behavior-only']
+    if phase.startswith('pilot'):
+        cmd+=['--behavior-only']
     return cmd
 
 
 def predictions(directory,tasks):
     unknown=set(directory.glob('predictions*.jsonl'))-{directory/f'predictions_llava_{t}.jsonl' for t in tasks}
-    if unknown:raise ValueError('Unexpected diagnostic task files')
+    # The unchanged extended-task runner opens empty files for absent pilot
+    # tasks. Permit only those known, zero-byte files; reject any extra rows.
+    empty_tasks={directory/f'predictions_llava_{t}.jsonl' for t in TASK_SETS['extended'] if t not in tasks}
+    if any(p not in empty_tasks or p.stat().st_size!=0 for p in unknown):
+        raise ValueError('Unexpected diagnostic task files')
     return [r for t in tasks for r in read_rows(directory/f'predictions_llava_{t}.jsonl')]
 
 
@@ -243,6 +256,8 @@ def run(args):
     arms=list(ARMS) if args.arm=='all' else [args.arm]
     forecast=estimate(manifest,args.phase,arms)
     print(json.dumps(forecast,indent=2),flush=True)
+    if args.phase.startswith('full') and args.arm=='all':
+        raise ValueError('Full jobs require one explicitly chosen arm: P1, P2, or P3')
     if args.plan:
         for arm in arms:print(shlex.join(command(args.root,args.workspace,manifest,args.phase,arm)))
         return True
@@ -255,13 +270,13 @@ def run(args):
         directory=output_dir(args.root,args.phase,arm)
         if directory.exists() and any(directory.iterdir()) and not (directory/'diagnostic_contract.json').exists():
             raise ValueError('Unknown diagnostic output collision')
-        if args.phase=='pilot':
-            verify_arm(args.root,manifest,'pilot-dry',arm)
+        if args.phase in ('pilot','full'):
+            verify_arm(args.root,manifest,args.phase+'-dry',arm)
         contract={'phase':args.phase,'arm':arm,'settings':manifest['arms'][arm],
                   'spec':manifest['phases'][args.phase],'manifest_sha256':sha(args.root/'outputs'/NAME/'manifest.json')}
         frozen_json(directory/'diagnostic_contract.json',contract)
         if (directory/'run_config.json').exists():verify_arm(args.root,manifest,args.phase,arm,complete=False)
-    if args.phase=='pilot':
+    if args.phase in ('pilot','full'):
         forecasts=[dry_projection(args.root,manifest,args.phase,arm) for arm in arms]
         forecast={'phase':args.phase,'arms':arms,'expected_seconds':sum(f['expected_seconds'] for f in forecasts),
                   'guard_seconds':sum(f['guard_seconds'] for f in forecasts),'measured_dry_runs':forecasts}
@@ -309,6 +324,7 @@ def main():
         finally:
             print('Job session ended. STOP the Pod; billing continues.',flush=True)
         raise SystemExit(0 if ok else 1)
+    if args.phase.startswith('full') and args.arm=='all':parser.error('Full jobs require --arm P1, P2, or P3')
     manifest=load_manifest(args.root);arms=list(ARMS) if args.arm=='all' else [args.arm]
     if args.action=='estimate':print(json.dumps(estimate(manifest,args.phase,arms),indent=2));return
     for arm in arms:

@@ -142,3 +142,115 @@ def test_dry_run_projection_uses_actual_arm_timings(prepared):
     assert projected['expected_seconds']==80*2+30
     assert projected['guard_seconds']==285
     assert projected['peak_vram_bytes']==1024
+
+
+def test_full_uses_original_900_input_and_one_arm_with_full_scoring(prepared):
+    root,manifest=prepared
+    full=manifest['phases']['full'];dry=manifest['phases']['full-dry']
+    assert (full['record_count'],full['graphs'])==(900,100)
+    assert (dry['record_count'],dry['graphs'])==(9,1)
+    assert full['input_jsonl']=='outputs/'+jobs.DATA_NAME+'/test/stage1_subset100.jsonl'
+    assert full['prompt_bodies_sha256']==manifest['main_user_turn_text_sha256']
+    for arm in jobs.ARMS:
+        cmd=jobs.command(root,Path('/workspace'),manifest,'full',arm)
+        assert '--behavior-only' not in cmd and '--behavior-only' not in jobs.command(root,Path('/workspace'),manifest,'full-dry',arm)
+        assert cmd[cmd.index('--expected-count')+1]=='900'
+        assert cmd[cmd.index('--output-dir')+1]==str(jobs.output_dir(root,'full',arm))
+    args=SimpleNamespace(root=root,workspace=root,phase='full',arm='all',plan=True,max_hours=None)
+    with pytest.raises(ValueError,match='one explicitly chosen arm'):jobs.run(args)
+
+
+def test_full_dry_projection_covers_all_tasks_and_full_requires_it(prepared,monkeypatch):
+    root,manifest=prepared
+    write_arm(root,manifest,'full-dry','P3')
+    rows=jobs.verify_arm(root,manifest,'full-dry','P3')
+    assert len(rows)==9 and len({r['task_type'] for r in rows})==9
+    projected=jobs.dry_projection(root,manifest,'full','P3')
+    assert projected['expected_seconds']==900*2+30
+    monkeypatch.setenv('TMUX','test')
+    monkeypatch.setattr(jobs,'hardware_preflight',lambda *a:pytest.fail('No GPU before dry proof'))
+    args=SimpleNamespace(root=root,workspace=root,phase='full',arm='P2',plan=False,max_hours=None)
+    with pytest.raises(ValueError,match='coverage'):jobs.run(args)
+
+
+@pytest.mark.parametrize('arm',jobs.ARMS)
+def test_runner_end_to_end_records_flags_and_preserves_resume(prepared,monkeypatch,arm):
+    import types
+    from test_llava_stage1_diagnostics import Processor
+    root,manifest=prepared
+    phase='pilot-dry';spec=manifest['phases'][phase]
+    class FakeProcessor(Processor):
+        @classmethod
+        def from_pretrained(cls,*a,**k):
+            assert k['revision']==jobs.MODELS['llava'][1]
+            return cls()
+    class FakeModel:
+        generation_config=SimpleNamespace()
+        @classmethod
+        def from_pretrained(cls,*a,**k):return cls()
+        def eval(self):return self
+    transformer=types.ModuleType('transformers');transformer.__version__=jobs.VERSIONS['transformers']
+    transformer.set_seed=lambda value:None if value==13 else pytest.fail('Wrong seed')
+    transformer.LlavaNextProcessor=FakeProcessor
+    transformer.LlavaNextForConditionalGeneration=FakeModel
+    transformer.LlavaNextConfig=SimpleNamespace(from_pretrained=lambda *a,**k:SimpleNamespace(
+        vision_config=SimpleNamespace(patch_size=14),vision_feature_select_strategy='default'))
+    monkeypatch.setitem(sys.modules,'transformers',transformer)
+    monkeypatch.setitem(sys.modules,'torch',SimpleNamespace(__version__=jobs.VERSIONS['torch'],
+                          bfloat16='bf16',cuda=SimpleNamespace(is_available=lambda:True)))
+    # Real image files still load through the runner; the model/processor are CPU stubs.
+    monkeypatch.setattr(runner,'prepare_inputs',lambda *a:{})
+    monkeypatch.setattr(runner,'image_diagnostics',lambda *a:{'stub':True})
+    calls=[]
+    def infer(model,processor,prompt,image,args,torch):
+        assert image.mode=='RGB' and args.max_new_tokens==1024 and args.seed==13
+        calls.append(prompt)
+        return (' 18',1,False,10,1.,1024)
+    monkeypatch.setattr(runner,'infer_one',infer)
+    cmd=jobs.command(root,root,manifest,phase,arm)
+    monkeypatch.setattr(sys,'argv',[cmd[2],*cmd[3:]])
+    runner.main()
+    directory=jobs.output_dir(root,phase,arm)
+    before={p.name:p.read_bytes() for p in directory.glob('predictions*.jsonl')}
+    rows=jobs.verify_arm(root,manifest,phase,arm)
+    assert len(rows)==8 and len(calls)==8
+    cfg=json.loads((directory/'run_config.json').read_text())
+    assert cfg['diagnostic_arm']==arm and cfg['user_turn_text_sha256']==spec['prompt_bodies_sha256']
+    for row in rows:
+        assert row['raw_response']==row.get('assistant_prefix','')+' 18'
+    runner.main()
+    assert len(calls)==8 and before=={p.name:p.read_bytes() for p in directory.glob('predictions*.jsonl')}
+
+
+def test_all_documented_blocks_are_self_contained_and_shell_valid(tmp_path):
+    import os,re,subprocess,shlex
+    blocks=re.findall(r'```bash\n(.*?)\n```',(ROOT/'scripts/LLAVA_STAGE1_DIAGNOSTICS.md').read_text(),re.S)
+    assert len(blocks)==9
+    bin_dir=tmp_path/'bin';bin_dir.mkdir()
+    log=tmp_path/'calls.jsonl'
+    setup='import os,sys,json,subprocess,shlex\na=sys.argv[1:]\nwith open(os.environ["CALLS"],"a") as f:f.write(json.dumps([os.path.basename(sys.argv[0]),a])+"\\n")\n'
+    scripts={
+        'git':'print("abc123" if a[0]=="rev-parse" else "abc123\\trefs/heads/inference50-core-keep")',
+        'python3':'pass',
+        'ssh':'''subprocess.run(['bash','-n','-c',a[-1]],check=True)
+if 'tmux new-session' in a[-1]:
+    inner=shlex.split(a[-1])[-1]
+    subprocess.run(['bash','-n','-c',inner],check=True)
+    assert 'bash scripts/llava_stage1_jobs.sh' in inner
+''',
+        'rsync':'pass','cat':'pass'}
+    for name,body in scripts.items():
+        path=bin_dir/name;path.write_text('#!'+sys.executable+'\n'+setup+body+'\n');path.chmod(0o755)
+    for index,block in enumerate(blocks):
+        assert 'SSH=' in block and 'read -rp' in block
+        stdin='127.0.0.1\n22\n'
+        if index in (5,6,7,8):stdin+='P2\n'
+        if index in (2,6):stdin+='2.09\n'
+        result=subprocess.run(['bash','-c',block],input=stdin,text=True,capture_output=True,cwd=tmp_path,
+                              env={**os.environ,'PATH':str(bin_dir)+os.pathsep+os.environ['PATH'],'CALLS':str(log)},timeout=10)
+        assert result.returncode==0,(index+1,result.stderr)
+    commands=[args[-1] for name,args in map(json.loads,log.read_text().splitlines()) if name=='ssh' and 'tmux' in args[-1]]
+    assert len(commands)==4
+    assert any('pilot all' in c for c in commands)
+    assert any('full P2' in c for c in commands)
+    assert not any('full all' in c for c in commands)
