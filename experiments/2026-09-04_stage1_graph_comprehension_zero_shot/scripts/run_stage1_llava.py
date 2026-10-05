@@ -50,6 +50,9 @@ from llava_common import (  # noqa: E402
 from prompt_common import sha256_file  # noqa: E402
 
 
+from llava_stage1_prompt import PROMPT_TEMPLATES, format_stage1_prompt
+
+
 MAX_NEW_TOKENS = 1024
 
 
@@ -68,6 +71,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--answer-format", choices=ANSWER_FORMATS, default="none")
     parser.add_argument("--max-new-tokens", type=int, default=MAX_NEW_TOKENS)
     parser.add_argument("--seed", type=int, default=13)
+    parser.add_argument("--prompt-template", choices=PROMPT_TEMPLATES, default="hf-chat")
     parser.add_argument("--resume", action="store_true")
     parser.add_argument("--preview-only", action="store_true")
     parser.add_argument("--approve-prompts", action="store_true")
@@ -76,6 +80,11 @@ def parse_args() -> argparse.Namespace:
         help="Permit a partial task set and skip aggregate scoring (pilot probes only).",
     )
     return parser.parse_args()
+
+
+def render_prompt(processor, record, args):
+    return format_stage1_prompt(processor, raw_image_prompt(record, args.answer_format),
+                                getattr(args, "prompt_template", "hf-chat"))
 
 
 def make_result(record, response, generated_tokens, hit_ceiling, vision_tokens,
@@ -163,8 +172,7 @@ def main() -> None:
     for task in task_types:
         if task not in first_by_task:
             continue
-        body = raw_image_prompt(first_by_task[task], args.answer_format)
-        previews[task] = format_prompt(processor, body, "image")
+        previews[task] = render_prompt(processor, first_by_task[task], args)
         print(f"PROMPT PREVIEW task={task}\n{previews[task]}", flush=True)
 
     first = records[0]
@@ -175,7 +183,7 @@ def main() -> None:
         first_image = opened.convert("RGB")
         first_inputs = prepare_inputs(
             processor,
-            format_prompt(processor, raw_image_prompt(first, args.answer_format), "image"),
+            render_prompt(processor, first, args),
             first_image,
         )
         first_image_budget = image_diagnostics(processor, first_inputs, first_image.size)
@@ -261,7 +269,7 @@ def main() -> None:
                 values = infer_one(
                     model,
                     processor,
-                    format_prompt(processor, raw_image_prompt(record, args.answer_format), "image"),
+                    render_prompt(processor, record, args),
                     image,
                     args,
                     torch,
