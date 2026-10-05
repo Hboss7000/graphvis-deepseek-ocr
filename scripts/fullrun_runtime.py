@@ -78,6 +78,13 @@ def enrich_config(config):
                 actual = {k:config.get(k) for k in source}
                 if actual != source:
                     raise ValueError('Rescue seed/GPU/decoding differs from strict execution')
+    contract_path = os.environ.get('FULLRUN_CONTRACT')
+    override_path = Path(contract_path).parent / 'tripwire_override.json' if contract_path else None
+    if override_path is not None and override_path.exists():
+        from fullrun_override import allowed
+        if not allowed(spec):
+            raise ValueError('Invalid parse override scope')
+        config['tripwire_overridden'] = True
     config['fullrun'] = spec
     config.pop('source_image_generation_flags', None)
     config.pop('source_image_generation_flags_provenance', None)

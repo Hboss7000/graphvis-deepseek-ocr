@@ -164,11 +164,11 @@ def saved_spec(root, directory, current):
     return recorded
 
 
-def tripwire(rows, stage, reference, reading_probe=False):
+def tripwire(rows, stage, reference, reading_probe=False, parse_override=False):
     if len(rows) < 20:
         return None
     first = rows[:20]
-    if not reading_probe and stage == 'qa' and sum(parse_answer(r['raw_response'], 4)[0] == 'FAILED' for r in first) / 20 > MAX_PARSE_FAILURE:
+    if not parse_override and not reading_probe and stage == 'qa' and sum(parse_answer(r['raw_response'], 4)[0] == 'FAILED' for r in first) / 20 > MAX_PARSE_FAILURE:
         return 'more than 50% QA parse failures in first 20'
     if not reading_probe and stage == 'stage1' and sum(not r['raw_response'].strip() or r.get('generated_token_count', 0) <= 1 for r in first) / 20 > .8:
         return 'more than 80% empty/one-token Stage 1 responses in first 20'
@@ -178,13 +178,17 @@ def tripwire(rows, stage, reference, reading_probe=False):
     return None
 
 
-def verify_job(directory, spec, complete=True):
+def verify_job(directory, spec, complete=True, parse_override=False):
     rows = prediction_rows(directory, spec)
     validate_rows(rows, spec, complete)
     config_path = directory / 'run_config.json'
     if not config_path.exists():
         raise ValueError(f'Missing run_config: {directory}')
     config = json.loads(config_path.read_text())
+    from fullrun_override import audit_override, allowed
+    overridden = audit_override(directory, spec, config)
+    if parse_override and not allowed(spec):
+        raise ValueError('Invalid parse override scope')
     if config.get('fullrun') != spec:
         raise ValueError('Fullrun contract differs from current frozen inputs')
     if spec['stage']=='qa' and spec.get('mode')=='full' and config.get('parser_protocol')!='explicit_v1':
@@ -214,10 +218,14 @@ def verify_job(directory, spec, complete=True):
     failures = sum(parse_answer(r['raw_response'], 4)[0] == 'FAILED' for r in rows) if spec['stage'] == 'qa' else 0
     ceiling = sum(bool(r['hit_token_ceiling']) for r in rows)
     reading_probe = spec['label'].startswith('probe_')
-    wire = tripwire(sorted(rows, key=lambda r: r.get('timestamp_utc', '')), spec['stage'], spec['seconds_per_item_reference'], reading_probe=reading_probe)
+    wire = tripwire(sorted(rows, key=lambda r: r.get('timestamp_utc', '')), spec['stage'], spec['seconds_per_item_reference'], reading_probe=reading_probe, parse_override=overridden or parse_override)
     if wire:
         raise ValueError('TRIPWIRE: ' + wire)
-    return {'job': spec['label'], 'rows': len(rows), 'expected': spec['record_count'], 'FAILED': failures,
+    correct = sum(parse_answer(r['raw_response'], 4)[0] == r.get('gold_option') for r in rows) if spec['stage'] == 'qa' else 0
+    return {'tripwire_overridden': overridden,
+            'accuracy': correct / len(rows) if rows and spec['stage'] == 'qa' else None,
+            'accuracy_among_parsed': correct / (len(rows) - failures) if len(rows) > failures and spec['stage'] == 'qa' else None,
+            'job': spec['label'], 'rows': len(rows), 'expected': spec['record_count'], 'FAILED': failures,
             'ceilings': ceiling, 'ceilings_per_task': {task:sum(r.get('task_type')==task and bool(r['hit_token_ceiling']) for r in rows) for task in sorted({r.get('task_type') for r in rows})} if spec['stage']=='stage1' else {}, 'parse_tiers': dict(Counter(parse_answer(r['raw_response'], 4)[1] for r in rows)) if spec['stage'] == 'qa' else {},
             'seconds_per_item': sum(r['item_elapsed_seconds'] for r in rows) / len(rows) if rows else None,
             'peak_vram_bytes': max((r['peak_memory_allocated_bytes'] for r in rows), default=0),

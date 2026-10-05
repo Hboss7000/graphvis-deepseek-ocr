@@ -12,4 +12,4 @@ mkdir -p "$TMPDIR"
 cd "$WORKSPACE/bachelorArbeit"
 exec "$WORKSPACE/venvs/venv_qwen/bin/python" scripts/fullrun_session.py "${1:?model: llava, qwen, gemma, deepseek; all for SMOKE=1}" \
   --root "$WORKSPACE/bachelorArbeit" --workspace "$WORKSPACE" --max-hours "${MAX_HOURS:-4}" \
-  $(if [[ "${SMOKE:-0}" == 1 ]]; then printf '%s' '--smoke'; fi)
+  $(if [[ "${SMOKE:-0}" == 1 ]]; then printf '%s' '--smoke'; fi) "${@:2}"

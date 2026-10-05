@@ -88,6 +88,11 @@ def consolidate_model(root,model,expected_count=500):
     audit=state["audit"]
     base=root/'outputs'/(DATA_NAME+'_results')/model
     versions={'strict_64':{},'extended_512':{}}
+    overridden_jobs = []
+    for condition in CONDITIONS:
+        config_path = base / ('qa_' + condition) / 'run_config.json'
+        if config_path.exists() and json.loads(config_path.read_text()).get('tripwire_overridden', False):
+            overridden_jobs.append('qa_' + condition)
     for condition in CONDITIONS:
         original=parsed_rows(read_rows(base/('qa_'+condition)/'predictions.jsonl'))
         if set(original)!=set(range(expected_count)):raise ValueError('Expected exact QA coverage')
@@ -98,13 +103,19 @@ def consolidate_model(root,model,expected_count=500):
         versions['extended_512'][condition]={i:replacements.get(i,r) for i,r in original.items()} if state['complete'] else {}
     metadata={r['statement_idx']:r for r in read_rows(root/'outputs'/DATA_NAME/'test/graph_metadata_0_500.jsonl')}
     strata,definitions=graph_strata(metadata)
-    report={'model':model,'primary':primary,'headline_rule':'extended only when all four models have completed verified rescues; otherwise strict-64',
+    report={'model':model,'primary':primary,
+            'tripwire_overridden': bool(overridden_jobs), 'tripwire_overridden_jobs': overridden_jobs,
+            'strict_scoring': 'All answers in denominator; unparsed answers count as wrong. Parsed-only accuracy is secondary.','headline_rule':'extended only when all four models have completed verified rescues; otherwise strict-64',
             'all_model_rescue_states':states,'extended_available':state['complete'],
             'extended_note':None if state['complete'] else 'Unavailable: no complete verified rescue for this model; extended metrics are null, never copied from strict results.', 'parser':'explicit_v1','rescue_audit':audit,
             'deepseek_ceiling_detection_approximate':model=='deepseek','strata_definitions':definitions,'versions':{}}
     for label,conditions in versions.items():
         value={'available':label=='strict_64' or state['complete'],'conditions':{c:metrics(list(rows.values())) for c,rows in conditions.items()},
                'paired_image_vs_text':{c:paired(conditions['image'],conditions[c]) for c in CONDITIONS if c!='image'},'strata':{}}
+        for condition, condition_metrics in value['conditions'].items():
+            condition_metrics['tripwire_overridden'] = label == 'strict_64' and 'qa_' + condition in overridden_jobs
+            if label == 'extended_512':
+                condition_metrics['strict_source_tripwire_overridden'] = 'qa_' + condition in overridden_jobs
         for kind in ('reachable','node_tercile'):
             for group in ((False,True) if kind=='reachable' else ('low','middle','high')):
                 indices={i for i in conditions['image'] if strata[i][kind]==group}

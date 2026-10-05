@@ -161,9 +161,14 @@ def stop_process(process):
             pass
 
 
-def watch_job(cmd, directory, spec, log, deadline, poll_seconds=1, stall_seconds=300):
+def watch_job(cmd, directory, spec, log, deadline, poll_seconds=1, stall_seconds=300, code_attempt=None):
     """Watch flushed JSONL bytes, not console chatter; kill the whole job process group."""
     env = dict(os.environ, FULLRUN_CONTRACT=str(directory / 'contract.json'))
+    from fullrun_override import audit_override
+    cfg_path = directory / 'run_config.json'
+    overridden = audit_override(directory, spec, json.loads(cfg_path.read_text()) if cfg_path.exists() else {})
+    if code_attempt:
+        env['FULLRUN_CODE_ATTEMPT'] = str(code_attempt)
     print('Launch: ' + shlex.join(cmd), flush=True)
     print(f'Monitor: tail -F {shlex.quote(str(log))}\nGPU: watch -n 30 nvidia-smi', flush=True)
     targets = [directory / s for s in ('pan_and_scan', 'no_pan_and_scan')] if spec['label'] == 'preflight' else [directory]
@@ -203,7 +208,7 @@ def watch_job(cmd, directory, spec, log, deadline, poll_seconds=1, stall_seconds
                     rows = prediction_rows(target, spec, growing=process.poll() is None)
                     validate_rows(rows, spec)
                     rows.sort(key=lambda r: r.get('timestamp_utc', ''))
-                    reason = tripwire(rows, spec['stage'], spec['seconds_per_item_reference'], reading_probe=spec['label'].startswith('probe_'))
+                    reason = tripwire(rows, spec['stage'], spec['seconds_per_item_reference'], reading_probe=spec['label'].startswith('probe_'), parse_override=overridden)
                     if reason:
                         break
                 if not reason and now - last_growth >= stall_seconds:
@@ -230,14 +235,17 @@ def watch_job(cmd, directory, spec, log, deadline, poll_seconds=1, stall_seconds
             stop_process(process)
             raise
     update_monitor(state)
-    return {'state': state, 'reason': reason, 'wall_seconds': time.monotonic() - started,
+    return {'tripwire_overridden': overridden, 'state': state, 'reason': reason, 'wall_seconds': time.monotonic() - started,
             'exit_code': process.returncode, 'command': cmd}
 
 
 def record_status(path, status):
     previous = json.loads(path.read_text()) if path.exists() else {'attempts': []}
+    status = dict(status)
+    status.setdefault('tripwire_overridden', previous.get('tripwire_overridden', False))
     previous['attempts'].append(dict(status, timestamp=time.time()))
     previous['state'] = status['state']
+    previous['tripwire_overridden'] = status.get('tripwire_overridden', previous.get('tripwire_overridden', False))
     path.parent.mkdir(parents=True, exist_ok=True)
     temp = path.with_suffix('.tmp')
     temp.write_text(json.dumps(previous, indent=2) + '\n')
@@ -261,6 +269,8 @@ def run_model(args, model, deadline):
     jobs = getattr(args, 'recovery_jobs', {}).get(model, specs(args.root, model, args.smoke))
     auxiliary = [] if getattr(args, 'recovery_jobs', None) is not None else auxiliary_specs(args.root, model, args.smoke)
     sequence = auxiliary + jobs if model == 'gemma' else jobs + auxiliary
+    if getattr(args, 'job', None):
+        sequence = [s for s in jobs if s['label'] == args.job]
     mode = 's0b' if getattr(args, 'recovery_jobs', None) is not None else ('smoke' if args.smoke else 'results')
     mode = getattr(args, 'mode_override', mode)
     base = args.root / 'outputs' / (DATA_NAME + '_' + mode) / model
@@ -279,10 +289,21 @@ def run_model(args, model, deadline):
         frozen_json(base / 'session.json', {'model': model, 'mode': mode, 'data_name': DATA_NAME})
         # ALL planned inputs and existing output states are checked before any model loads.
         eligible = []
+        code_attempts = {}
         failed = False
         for spec in sequence:
             try:
                 validate_inputs(args.root, spec)
+                if getattr(args, 'override_qa_parse_tripwire', False):
+                    from fullrun_override import prepare_override
+                    spec, attempt = prepare_override(args.root, base / spec['label'], spec)
+                    code_attempts[spec['label']] = attempt
+                    previous_status = base / 'status' / (spec['label'] + '.json')
+                    already_completed = previous_status.exists() and json.loads(previous_status.read_text())['state'] == 'COMPLETED'
+                    record_status(previous_status,
+                                  {'state': 'COMPLETED' if already_completed else 'PREPARED', 'tripwire_overridden': True,
+                                   'reason': 'Explicit QA parse override; original rows preserved',
+                                   'code_attempt': str(attempt)})
                 check_resume(base / spec['label'], spec)
                 eligible.append(spec)
             except Exception as exc:
@@ -330,7 +351,8 @@ def run_model(args, model, deadline):
                             raise ValueError('Five-row smoke output without three-row resume evidence')
                         continue
                     cmd = command(args.root, args.workspace, spec, directory, report, limit)
-                    status = watch_job(cmd, directory, spec, log_root / (spec['label'] + '.log'), deadline)
+                    status = watch_job(cmd, directory, spec, log_root / (spec['label'] + '.log'), deadline,
+                                       **({'code_attempt': code_attempts[spec['label']]} if spec['label'] in code_attempts else {}))
                     if limit == 5 and len(prediction_rows(directory,spec)) == 5:
                         write_resume_proof(directory,spec)
                     if status['state'] != 'COMPLETED':
@@ -369,7 +391,12 @@ def main():
     p.add_argument('--max-hours', type=float, default=4)
     p.add_argument('--smoke-root', type=Path, help='Historical S0 evidence root')
     p.add_argument('--s0b-root', type=Path, help='Historical session 0b evidence root')
+    p.add_argument('--job', choices=['qa_kg_text'], help='Resume only the interrupted Gemma strict job')
+    p.add_argument('--override-qa-parse-tripwire', action='store_true')
     args = p.parse_args()
+    if args.job or args.override_qa_parse_tripwire:
+        if args.model != 'gemma' or args.smoke or not args.job or not args.override_qa_parse_tripwire:
+            p.error('Use gemma --job qa_kg_text --override-qa-parse-tripwire for this one strict resume')
     args.root = args.root.resolve()
     if not math.isfinite(args.max_hours) or args.max_hours <= 0:
         p.error('--max-hours must be finite and positive')
@@ -391,7 +418,9 @@ def main():
     if not args.plan and not args.smoke:
         from fullrun_gate import model_gate, evidence_roots
         gemma_smoke = None
-        if args.model == 'gemma':
+        if args.model == 'gemma' and args.job:
+            gemma_smoke = args.root / 'outputs' / (DATA_NAME + '_gemma_start_smoke')
+        elif args.model == 'gemma':
             smoke, _ = evidence_roots(args.root, args.smoke_root, args.s0b_root)
             fresh = copy.copy(args)
             fresh.smoke = True

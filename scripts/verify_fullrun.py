@@ -6,11 +6,13 @@ from pathlib import Path
 from fullrun_common import ROOT, DATA_NAME, MODELS, specs, verify_job, validate_frozen_files, saved_spec
 
 
-def verify_model(root, model, smoke=False):
+def verify_model(root, model, smoke=False, job=None):
     mode = 'smoke' if smoke else 'results'
     base = root / 'outputs' / (DATA_NAME + '_' + mode)
     report = {'model': model, 'mode': mode, 'jobs': [], 'errors': []}
     for spec in specs(root, model, smoke):
+        if job and spec["label"] != job:
+            continue
         try:
             spec = saved_spec(root, base / model / spec["label"], spec)
             result = verify_job(base / model / spec['label'], spec)
@@ -23,6 +25,8 @@ def verify_model(root, model, smoke=False):
                     other = json.loads(path.read_text())
                     if other.get('prompt_bodies_sha256') != spec['prompt_bodies_sha256']:
                         raise ValueError(f'Prompt hash differs across models: {peer}')
+            if json.loads(status.read_text()).get('tripwire_overridden', False) != result['tripwire_overridden']:
+                raise ValueError('Status/config tripwire override mismatch')
             report['jobs'].append(result)
         except (ValueError, KeyError, TypeError, OSError) as exc:
             report['errors'].append(f'{spec["label"]}: {exc}')
@@ -36,6 +40,9 @@ def print_table(report):
     for job in report['jobs']:
         print(f'{job["job"]:20} {job["rows"]:4}/{job["expected"]:<8} {job["FAILED"]:7} {job["ceilings"]:9} '
               f'{job["seconds_per_item"]:9.3f} {job["peak_vram_bytes"]/1024**3:10.2f}')
+        print('  tripwire_overridden=' + str(job.get('tripwire_overridden', False)).lower())
+        if job.get('accuracy') is not None:
+            print(f"  strict accuracy={job['accuracy']:.4f}; parsed-only accuracy={job['accuracy_among_parsed']}")
         if job['parse_tiers']:
             print('  parse tiers: ' + json.dumps(job['parse_tiers'], sort_keys=True))
         if job.get('ceilings_per_task'):
@@ -52,10 +59,11 @@ def main():
     p.add_argument('model', choices=(*MODELS, 'all'))
     p.add_argument('--root', type=Path, default=ROOT)
     p.add_argument('--smoke', action='store_true')
+    p.add_argument('--job', choices=['stage1'] + ['qa_' + c for c in ('image','text_noref','text','kg_text')])
     args = p.parse_args()
     ok = True
     for model in MODELS if args.model == 'all' else [args.model]:
-        result = verify_model(args.root, model, args.smoke)
+        result = verify_model(args.root, model, args.smoke, args.job)
         print_table(result)
         ok &= result['passed']
     raise SystemExit(0 if ok else 1)
