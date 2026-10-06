@@ -19,6 +19,7 @@ outputs/
 __pycache__/
 *.pyc
 .venv/
+.venv_llava_cpu/
 venv/
 *.egg-info/
 

@@ -1,15 +1,32 @@
 {
-  "cpu_check_command": "/tmp/llava-stage1-cpu/bin/python -m pytest -q tests/llava_stage1_training_cpu_checks.py tests/test_llava_stage1_training_data.py",
+  "cpu_check_command": "OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 .venv_llava_cpu/bin/python -m pytest -q tests/llava_stage1_training_cpu_checks.py tests/test_llava_stage1_training_data.py tests/test_llava_stage1_diagnostics.py tests/test_llava_runners.py tests/test_llava_stage1_execution.py",
   "date": "2026-10-06",
   "environment": {
+    "directory": ".venv_llava_cpu",
     "freeze_accelerate": "1.15.0",
     "freeze_mlflow": null,
     "freeze_peft": null,
-    "installed": false
+    "freeze_sha256": "1ba1c0682646d1cdd5c60c70727998eb0124fefbf85ba9edddaecb020b147e78",
+    "installed": true,
+    "versions": {
+      "accelerate": "1.15.0",
+      "mlflow": "3.16.1",
+      "peft": "0.21.2",
+      "torch": "2.8.0+cpu",
+      "transformers": "5.16.1"
+    }
   },
   "no_paid_runs": true,
   "no_pod_operations": true,
-  "status": "PARTIAL: installation approval needed before stop point 1 can complete",
+  "ready": [
+    "HF+PEFT trainer",
+    "real-model capacity probe",
+    "20-step 64-example checkpoint/resume smoke",
+    "same-adapter dry/full Stage 1 and strict-64 QA evaluation",
+    "measured cost/guard plan",
+    "tmux pod launch and monitoring commands"
+  ],
+  "status": "STOP POINT 1 COMPLETE: CPU token audit, forward/backward/resume passed",
   "subsets": {
     "training": {
       "answer_characters_per_task": {
@@ -263,23 +280,36 @@
     }
   },
   "test_command": "myvenv/bin/python -m pytest -q tests/test_llava_stage1_training_data.py tests/test_llava_stage1_diagnostics.py tests/test_llava_runners.py",
+  "token_diagnostics_sha256": "aa171bd74760976f8f901c7c394cf7caf26b0cb442fe282e87bb1cbd1099fbfc",
   "unverified": [
-    "expanded token and answer-token distributions",
-    "zero examples over 4096",
-    "HF/PEFT tiny model forward/backward",
-    "adapter/projector/optimizer/RNG resume with HF/PEFT",
-    "real model bf16/CUDA VRAM and speed",
-    "MLflow compatibility and file-store writes"
+    "real 7B model bf16/CUDA VRAM, throughput and loss",
+    "real pod smoke/resume and cost",
+    "tuned evaluation outputs"
   ],
   "verified": {
+    "adapter_projector_inference_reload": "exact logits and greedy generation IDs on tiny random model",
+    "comparison": "existing main and P3 Stage 1 and all four 500-row main QA arms validated and re-scored; P2/tuned explicitly missing",
+    "cpu_and_regression_tests_passed": 51,
+    "csv_fallback": "continues after deliberately failed MLflow calls",
     "hashes_checked": 2608,
     "lightweight_tests_passed": 37,
     "manifest_sha256": "643dfe4d0eb248bd7e8050b9d77e06c6fdd155d996c279df3c6e0eb40e932574",
+    "mlflow_file_store": "written/readable; resumed same run ID; socket connections forbidden in test",
+    "over_4096": 0,
+    "plots": "CSV and readable MLflow store agree; loss/lr 1920x1080 PNGs exported and loss figure inspected",
+    "pod_commands": "18 bash blocks syntax checked; five tmux launch blocks exercised with stub workers and explicit environment/LR propagation; real GPU execution unverified",
+    "production_training_loop_resume": "passed on tiny float32 model with actual vision processing",
+    "real_HF_PEFT_tiny_forward_backward_resume": "passed; exact parameters after resumed vs uninterrupted updates",
     "test_question_ids_checked": 500,
+    "token_distributions": "token_diagnostics_summary.json",
     "train_validation_test_question_id_overlap": 0,
     "training_examples": 7200,
     "training_graphs": 1200,
+    "training_max_tokens": 3234,
+    "truncated_examples": 0,
     "validation_examples": 600,
-    "validation_graphs": 100
+    "validation_failure_recovery": "optimizer update checkpointed before validation; failed validation replayed on resume",
+    "validation_graphs": 100,
+    "validation_max_tokens": 3166
   }
 }
