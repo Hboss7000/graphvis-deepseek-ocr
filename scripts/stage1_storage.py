@@ -1,8 +1,11 @@
 """Checkpoint disk budgeting and retention shared by Stage 1 backbones."""
 import json
+from decimal import Decimal, InvalidOperation
+import os
 from pathlib import Path
 import re
 import shutil
+import subprocess
 import time
 
 
@@ -36,14 +39,42 @@ def checkpoint_budget(model, optimizer, projection, config):
 
 
 def check_free_space(parent, budget):
-    parent = Path(parent)
-    free = shutil.disk_usage(parent).free
+    """Measure the whole volume anew; df reports the datacenter pool on RunPod."""
+    workspace = Path(os.environ.get('WORKSPACE', '/workspace')).resolve()
+    cap_gb = os.environ.get('VOLUME_CAP_GB', '200')
+    try:
+        cap = Decimal(cap_gb)
+        if not cap.is_finite() or cap <= 0:
+            raise ValueError('Cap must be finite and positive')
+        cap_bytes = int(cap * 1_000_000_000)  # Decimal GB, not GiB.
+        if cap_bytes < 1:
+            raise ValueError('Cap must be at least one byte')
+        if not Path(parent).resolve().is_relative_to(workspace):
+            raise ValueError('Checkpoint destination is outside WORKSPACE')
+        measured = subprocess.run(['du', '-sb', '--', str(workspace)],
+                                  capture_output=True, text=True, check=True)
+        used = int(measured.stdout.partition('\t')[0])
+        if used < 0:
+            raise ValueError('Invalid negative workspace usage')
+    except (InvalidOperation, ValueError, OSError, subprocess.CalledProcessError) as error:
+        detail = error.stderr.strip() if isinstance(error, subprocess.CalledProcessError) else str(error)
+        raise InsufficientCheckpointSpace(
+            f'Checkpoint paused: cannot determine volume quota/usage '
+            f'(VOLUME_CAP_GB={cap_gb}, workspace={workspace}): {detail}. '
+            'Last intact checkpoint retained; STOP the Pod.') from error
+    free = cap_bytes - used
     required = 2 * budget['estimated_checkpoint_bytes']
+    report = {**budget, 'volume_cap_gb': str(cap), 'volume_cap_bytes': cap_bytes,
+              'workspace_path': str(workspace), 'workspace_used_bytes': used,
+              'usage_method': 'du -sb', 'free_bytes_before_save': free,
+              'required_free_bytes': required}
+    print('CHECKPOINT DISK BUDGET: ' + json.dumps(report, sort_keys=True), flush=True)
     if free < required:
         raise InsufficientCheckpointSpace(
-            f'Checkpoint paused: free={free} bytes, required={required} bytes '
+            f'Checkpoint paused: cap={cap_bytes} bytes, used={used} bytes, '
+            f'cap_minus_usage={free} bytes, required={required} bytes '
             '(2 x checkpoint budget). Last intact checkpoint retained; STOP the Pod.')
-    return {**budget, 'free_bytes_before_save': free, 'required_free_bytes': required}
+    return report
 
 
 def retain_checkpoints(directory, current, config, keep=2):

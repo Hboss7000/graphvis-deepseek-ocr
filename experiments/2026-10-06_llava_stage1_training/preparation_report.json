@@ -299,8 +299,25 @@
   ],
   "verified": {
     "adapter_projector_inference_reload": "exact logits and greedy generation IDs on tiny random model",
+    "checkpoint_quota_guard": {
+      "date": "2026-10-07",
+      "default_volume_cap_gb": 200,
+      "gb_bytes": 1000000000,
+      "logged_fields": [
+        "volume_cap_gb",
+        "volume_cap_bytes",
+        "workspace_used_bytes",
+        "free_bytes_before_save",
+        "required_free_bytes"
+      ],
+      "on_failure": "clean pause with last intact checkpoint retained; no new incomplete directory",
+      "precheck": "df -h /workspace and du -sh /workspace; df is diagnostic, never used for the quota guard",
+      "space_policy": "configured cap bytes minus measured workspace usage >= 2 x estimated checkpoint bytes",
+      "usage_command": "du -sb -- WORKSPACE (default /workspace), refreshed before each checkpoint save",
+      "verification": "quota boundary, refreshed usage, negative remaining quota, invalid cap, failed du, whole workspace measurement and atomic save preservation tests passed; no pod step executed"
+    },
     "comparison": "existing main and P3 Stage 1 and all four 500-row main QA arms validated and re-scored; P2/tuned explicitly missing",
-    "cpu_and_regression_tests_passed": 66,
+    "cpu_and_regression_tests_passed": 75,
     "csv_fallback": "continues after deliberately failed MLflow calls",
     "hashes_checked": 2608,
     "lightweight_tests_passed": 37,

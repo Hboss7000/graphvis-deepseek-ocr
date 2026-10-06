@@ -2,6 +2,7 @@
 # Approved environment setup; run only on a separately authorized pod.
 set -euo pipefail
 export WORKSPACE=${WORKSPACE:-/workspace}
+export VOLUME_CAP_GB=${VOLUME_CAP_GB:-200}
 export HF_HOME="$WORKSPACE/.cache/huggingface"
 export HF_HUB_CACHE="$HF_HOME/hub" HUGGINGFACE_HUB_CACHE="$HF_HOME/hub"
 export XDG_CACHE_HOME="$WORKSPACE/.cache" TORCH_HOME="$WORKSPACE/.cache/torch"
@@ -12,8 +13,10 @@ export MLFLOW_DISABLE_TELEMETRY=true MLFLOW_DISABLE_AGENT_HINT=true
 PROJECT="$WORKSPACE/bachelorArbeit"
 TRAIN_ENV="$WORKSPACE/venvs/venv_train"
 test -n "${TMUX:-}" || { echo 'Setup must run inside tmux.' >&2; exit 1; }
-trap 'df -h "$WORKSPACE"; echo "SETUP FINISHED/FAILED: STOP the Pod after reviewing the log."' EXIT
+trap 'df -h "$WORKSPACE"; du -sh "$WORKSPACE"; echo "SETUP FINISHED/FAILED: STOP the Pod after reviewing the log."' EXIT
 df -h "$WORKSPACE"
+du -sh "$WORKSPACE"
+echo "Configured volume cap: $VOLUME_CAP_GB GB"
 exec 9>>"$WORKSPACE/.fullrun_gpu.lock"
 flock -n 9 || { echo 'Another GPU session holds the workspace lock.' >&2; exit 1; }
 test ! -e "$TRAIN_ENV"

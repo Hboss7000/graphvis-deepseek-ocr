@@ -7,7 +7,7 @@ been run. Henrique pushes the commits. Existing uncommitted work is excluded.
 Qwen transfer training now reuses this trainer, storage, logging and evaluation
 code. See [QWEN_STAGE1_TRAINING.md](QWEN_STAGE1_TRAINING.md) for its separately
 audited native template, approved four merger bridges and Stage 1-first/optional
-QA commands. The combined CPU regression suite passed 66 checks; the original
+QA commands. The combined CPU regression suite passed 75 checks; the original
 55-check LLaVA suite remains included. No pod step was executed.
 
 ## Approved environment and package sources
@@ -34,10 +34,13 @@ Read-only pre-check, on an existing authorized pod:
 
 ```bash
 export WORKSPACE=/workspace
+export VOLUME_CAP_GB=${VOLUME_CAP_GB:-200}
 export PROJECT="$WORKSPACE/bachelorArbeit"
 export SYSTEM_PYTHON=$(bash "$PROJECT/scripts/stage1_train_interpreter.sh" "$WORKSPACE")
 "$SYSTEM_PYTHON" -c 'import sys; print("Selected interpreter:",sys.executable); print("Python:",sys.version)'
 df -h "$WORKSPACE"
+du -sh "$WORKSPACE"
+printf 'Configured volume cap: %s GB\n' "$VOLUME_CAP_GB"
 ```
 
 The exact installation commands are in `llava_stage1_pod_setup.sh`, launched in
@@ -194,26 +197,39 @@ restores the exact continuation and rejects recipe/code/data drift. Failed write
 never publish an incomplete checkpoint. Keep the latest **two intact checkpoints
 plus the final one**. Prune this run's older saves only after the newly published
 checkpoint verifies; preserve the previous resume point until then. Before every
-save, stop cleanly with exit 75 if free space is below **2 × the conservative
+save, stop cleanly with exit 75 if remaining quota is below **2 × the conservative
 checkpoint size estimate**, keeping the last intact save. Each save logs tensor
-sizes/dtypes and disk budget; the pod worker logs `df -h /workspace` at start/end.
+sizes/dtypes, configured cap, measured workspace usage and disk budget; the pod
+worker logs both `df -h /workspace` and `du -sh /workspace` at start/end.
 Checkpoints/caches/logs stay in /workspace.
+
+RunPod's `df` reports the datacenter pool, so it is diagnostic only. Before
+**each** checkpoint save, the guard runs `du -sb -- /workspace` again and computes
+`remaining_bytes = VOLUME_CAP_GB * 1,000,000,000 - workspace_used_bytes`.
+`VOLUME_CAP_GB` defaults to **200 decimal GB**; set it to the actual volume quota.
+`WORKSPACE` selects the measured root when overridden. The log records cap bytes,
+used bytes, remaining bytes and the required `2 × checkpoint estimate`, including
+on an insufficient-space pause. Invalid caps or failed usage measurements also
+pause cleanly instead of falling back to pool space. The last intact checkpoint
+is preserved, and no new incomplete checkpoint directory is created. The configured
+cap is passed explicitly into tmux so a custom value reaches every save.
 
 The pinned LLaVA architecture gives 335,544,320 LoRA parameters (PEFT float32)
 and 20,979,712 projector parameters (bf16). AdamW has two moment tensors at each
 parameter's dtype. The tensor payload of one complete checkpoint is approximately
 **4.15 GB / 3.87 GiB**, excluding small serialization/config/RNG overhead. The
-save guard adds 5% plus overhead: roughly **8.12 GiB free** is required before a
+save guard adds 5% plus overhead: roughly **8.12 GiB remaining** is required before a
 save. Retention temporarily holds three saves while the new one verifies:
 approximately **12.5 GB raw**, or **13.1 GB budgeted**, then two remain. These are
 architecture/dtype estimates; the real run logs actual tensor counts and file sizes.
 
-With the reported 100 GB volume / 70 GB used, cached weights already included,
+If `du -sb /workspace` reports 70 GB used, cached weights already included,
 reserve about 0.65 GB for the new rendered training data and 0.25 GB for evaluation,
 metrics and logs. Expected peak is approximately **84 GB + the new training venv
 size** (about 90 GB if the venv adds 6 GB). This is a planning example, not a
 measured free-space claim. Installation scratch and other active jobs can add
-usage; the pre-check and per-save guard use actual disk free space. Evaluation
+usage; the per-save guard uses the configured volume cap minus freshly measured
+workspace usage. Evaluation
 reuses the retained adapter and base snapshot without creating base-weight copies.
 
 Mandatory metrics.csv logs loss, both rates, gradient norm, actual tokens/s,
@@ -270,10 +286,11 @@ on a separately authorized GPU pod**:
 
 ```bash
 export WORKSPACE=/workspace
+export VOLUME_CAP_GB=${VOLUME_CAP_GB:-200}
 export PROJECT="$WORKSPACE/bachelorArbeit"
 export LOG="$WORKSPACE/logs/llava_stage1_setup_$(date -u +%Y%m%dT%H%M%SZ).log"
 mkdir -p "$WORKSPACE/logs"
-tmux new-session -d -s llava-setup "env WORKSPACE='$WORKSPACE' timeout --signal=INT --kill-after=120s 14400 bash '$PROJECT/scripts/llava_stage1_pod_setup.sh' >'$LOG' 2>&1"
+tmux new-session -d -s llava-setup "env WORKSPACE='$WORKSPACE' VOLUME_CAP_GB='$VOLUME_CAP_GB' timeout --signal=INT --kill-after=120s 14400 bash '$PROJECT/scripts/llava_stage1_pod_setup.sh' >'$LOG' 2>&1"
 tail -n 80 "$LOG"
 nvidia-smi
 ```
@@ -299,7 +316,7 @@ read -rp 'SSH port: ' POD_PORT
 read -rp 'SSH private key path: ' POD_KEY
 export RSYNC_RSH="ssh -p $POD_PORT -i \"$POD_KEY\""
 du -sh "$LOCAL_ROOT/outputs/llava_stage1_training_2026-10-06" "$LOCAL_ROOT/outputs/llava_stage1_eval_inputs"
-ssh -p "$POD_PORT" -i "$POD_KEY" "root@$POD_IP" 'cd /workspace/bachelorArbeit && git pull --ff-only && df -h /workspace'
+ssh -p "$POD_PORT" -i "$POD_KEY" "root@$POD_IP" 'cd /workspace/bachelorArbeit && git pull --ff-only && df -h /workspace && du -sh /workspace'
 rsync -a --checksum --ignore-existing -e "$RSYNC_RSH" "$LOCAL_ROOT/outputs/llava_stage1_training_2026-10-06/" "root@$POD_IP:$REMOTE_ROOT/outputs/llava_stage1_training_2026-10-06/"
 rsync -a --checksum --ignore-existing -e "$RSYNC_RSH" "$LOCAL_ROOT/outputs/llava_stage1_eval_inputs/" "root@$POD_IP:$REMOTE_ROOT/outputs/llava_stage1_eval_inputs/"
 ```
@@ -345,12 +362,13 @@ loading are recorded. The setup pod's actual 4-hour guard remains separate.
 
 ```bash
 export WORKSPACE=/workspace
+export VOLUME_CAP_GB=${VOLUME_CAP_GB:-200}
 export PROJECT="$WORKSPACE/bachelorArbeit"
 export RUN_TAG=llava_stage1
 export MAX_SECONDS=3600
 export LOG="$WORKSPACE/logs/${RUN_TAG}_probe.log"
 mkdir -p "$WORKSPACE/logs"
-tmux new-session -d -s llava-probe "env WORKSPACE='$WORKSPACE' RUN_TAG='$RUN_TAG' MAX_SECONDS='$MAX_SECONDS' bash '$PROJECT/scripts/llava_stage1_pod_job.sh' probe >'$LOG' 2>&1"
+tmux new-session -d -s llava-probe "env WORKSPACE='$WORKSPACE' VOLUME_CAP_GB='$VOLUME_CAP_GB' RUN_TAG='$RUN_TAG' MAX_SECONDS='$MAX_SECONDS' bash '$PROJECT/scripts/llava_stage1_pod_job.sh' probe >'$LOG' 2>&1"
 tail -n 80 "$LOG"
 nvidia-smi
 ```
@@ -378,6 +396,7 @@ greedy probe IDs, and verifies the file store is readable with one resumed run I
 
 ```bash
 export WORKSPACE=/workspace
+export VOLUME_CAP_GB=${VOLUME_CAP_GB:-200}
 export PROJECT="$WORKSPACE/bachelorArbeit"
 export RUN_TAG=llava_stage1
 export LORA_LR=2e-5 PROJECTOR_LR=2e-5
@@ -387,7 +406,7 @@ export MAX_SECONDS=$("$PY" -c 'import json,math,sys; print(math.ceil(json.load(o
 export LOG="$WORKSPACE/logs/${RUN_TAG}_smoke.log"
 mkdir -p "$WORKSPACE/logs"
 cat "$PLAN"
-tmux new-session -d -s llava-smoke "env WORKSPACE='$WORKSPACE' RUN_TAG='$RUN_TAG' LORA_LR='$LORA_LR' PROJECTOR_LR='$PROJECTOR_LR' MAX_SECONDS='$MAX_SECONDS' timeout --signal=INT --kill-after=120s $MAX_SECONDS bash -c 'bash \"$PROJECT/scripts/llava_stage1_pod_job.sh\" smoke-first && bash \"$PROJECT/scripts/llava_stage1_pod_job.sh\" smoke-resume' >'$LOG' 2>&1"
+tmux new-session -d -s llava-smoke "env WORKSPACE='$WORKSPACE' VOLUME_CAP_GB='$VOLUME_CAP_GB' RUN_TAG='$RUN_TAG' LORA_LR='$LORA_LR' PROJECTOR_LR='$PROJECTOR_LR' MAX_SECONDS='$MAX_SECONDS' timeout --signal=INT --kill-after=120s $MAX_SECONDS bash -c 'bash \"$PROJECT/scripts/llava_stage1_pod_job.sh\" smoke-first && bash \"$PROJECT/scripts/llava_stage1_pod_job.sh\" smoke-resume' >'$LOG' 2>&1"
 tail -n 80 "$LOG"
 nvidia-smi
 ```
@@ -430,6 +449,7 @@ approval with its expected +50% pod termination guard, then launch:
 
 ```bash
 export WORKSPACE=/workspace
+export VOLUME_CAP_GB=${VOLUME_CAP_GB:-200}
 export PROJECT="$WORKSPACE/bachelorArbeit"
 export RUN_TAG=llava_stage1
 export LORA_LR=2e-5 PROJECTOR_LR=2e-5
@@ -440,7 +460,7 @@ export LOG="$WORKSPACE/logs/${RUN_TAG}_train.log"
 unset RESUME_CHECKPOINT
 mkdir -p "$WORKSPACE/logs"
 cat "$PLAN"
-tmux new-session -d -s llava-train "env WORKSPACE='$WORKSPACE' RUN_TAG='$RUN_TAG' LORA_LR='$LORA_LR' PROJECTOR_LR='$PROJECTOR_LR' MAX_SECONDS='$MAX_SECONDS' RESUME_CHECKPOINT='${RESUME_CHECKPOINT:-}' bash '$PROJECT/scripts/llava_stage1_pod_job.sh' train >'$LOG' 2>&1"
+tmux new-session -d -s llava-train "env WORKSPACE='$WORKSPACE' VOLUME_CAP_GB='$VOLUME_CAP_GB' RUN_TAG='$RUN_TAG' LORA_LR='$LORA_LR' PROJECTOR_LR='$PROJECTOR_LR' MAX_SECONDS='$MAX_SECONDS' RESUME_CHECKPOINT='${RESUME_CHECKPOINT:-}' bash '$PROJECT/scripts/llava_stage1_pod_job.sh' train >'$LOG' 2>&1"
 tail -n 80 "$LOG"
 nvidia-smi
 ```
@@ -460,6 +480,7 @@ its measured report supplies the full evaluation estimate.
 
 ```bash
 export WORKSPACE=/workspace
+export VOLUME_CAP_GB=${VOLUME_CAP_GB:-200}
 export PROJECT="$WORKSPACE/bachelorArbeit"
 export RUN_TAG=llava_stage1
 export EVAL_TAG=smoke
@@ -467,7 +488,7 @@ export ADAPTER_PATH="$WORKSPACE/outputs/$RUN_TAG/smoke/checkpoint-000020"
 export MAX_SECONDS=3600
 export LOG="$WORKSPACE/logs/${RUN_TAG}_${EVAL_TAG}_eval_dry.log"
 mkdir -p "$WORKSPACE/logs"
-tmux new-session -d -s llava-eval-dry "env WORKSPACE='$WORKSPACE' RUN_TAG='$RUN_TAG' EVAL_TAG='$EVAL_TAG' ADAPTER_PATH='$ADAPTER_PATH' MAX_SECONDS='$MAX_SECONDS' bash '$PROJECT/scripts/llava_stage1_pod_job.sh' eval-dry >'$LOG' 2>&1"
+tmux new-session -d -s llava-eval-dry "env WORKSPACE='$WORKSPACE' VOLUME_CAP_GB='$VOLUME_CAP_GB' RUN_TAG='$RUN_TAG' EVAL_TAG='$EVAL_TAG' ADAPTER_PATH='$ADAPTER_PATH' MAX_SECONDS='$MAX_SECONDS' bash '$PROJECT/scripts/llava_stage1_pod_job.sh' eval-dry >'$LOG' 2>&1"
 tail -n 80 "$LOG"
 nvidia-smi
 ```
@@ -490,6 +511,7 @@ and expected +50% actual pod guard before launching full 100×9×2 and 500×4:
 
 ```bash
 export WORKSPACE=/workspace
+export VOLUME_CAP_GB=${VOLUME_CAP_GB:-200}
 export PROJECT="$WORKSPACE/bachelorArbeit"
 export RUN_TAG=llava_stage1
 export EVAL_TAG=trained
@@ -500,7 +522,7 @@ export MAX_SECONDS=$("$PY" -c 'import json,math,sys; print(math.ceil(json.load(o
 export LOG="$WORKSPACE/logs/${RUN_TAG}_${EVAL_TAG}_eval.log"
 mkdir -p "$WORKSPACE/logs"
 cat "$PLAN"
-tmux new-session -d -s llava-eval "env WORKSPACE='$WORKSPACE' RUN_TAG='$RUN_TAG' EVAL_TAG='$EVAL_TAG' ADAPTER_PATH='$ADAPTER_PATH' MAX_SECONDS='$MAX_SECONDS' bash '$PROJECT/scripts/llava_stage1_pod_job.sh' eval >'$LOG' 2>&1"
+tmux new-session -d -s llava-eval "env WORKSPACE='$WORKSPACE' VOLUME_CAP_GB='$VOLUME_CAP_GB' RUN_TAG='$RUN_TAG' EVAL_TAG='$EVAL_TAG' ADAPTER_PATH='$ADAPTER_PATH' MAX_SECONDS='$MAX_SECONDS' bash '$PROJECT/scripts/llava_stage1_pod_job.sh' eval >'$LOG' 2>&1"
 tail -n 80 "$LOG"
 nvidia-smi
 ```

@@ -1,7 +1,6 @@
 import hashlib
 import json
 from pathlib import Path
-import shutil
 import subprocess
 import sys
 
@@ -41,14 +40,68 @@ def test_retention_keeps_latest_two_final_and_resume_until_new_save_verifies(tmp
     assert {p.name for p in tmp_path.glob('checkpoint-*')} == {'checkpoint-000450', 'checkpoint-000500', 'checkpoint-000600'}
 
 
-def test_insufficient_space_stops_before_write(tmp_path, monkeypatch):
-    usage = shutil.disk_usage(tmp_path)
-    monkeypatch.setattr(shutil, 'disk_usage', lambda _: usage._replace(free=199))
+def test_insufficient_space_stops_before_write(tmp_path, monkeypatch, capsys):
+    import stage1_storage
+    monkeypatch.setenv('WORKSPACE', str(tmp_path))
+    monkeypatch.setenv('VOLUME_CAP_GB', '0.000001')  # 1000 decimal bytes.
+    calls = []
+    usages = iter((801, 800, 1001))
+    def measure(command, **kwargs):
+        calls.append(command)
+        return subprocess.CompletedProcess(command, 0, f'{next(usages)}\t{tmp_path}\n', '')
+    monkeypatch.setattr(stage1_storage.subprocess, 'run', measure)
+    # The datacenter's free space must never determine the volume guard.
+    def forbid_df(_):
+        raise AssertionError('Do not use datacenter pool free space')
+    monkeypatch.setattr(stage1_storage.shutil, 'disk_usage', forbid_df)
     with pytest.raises(InsufficientCheckpointSpace, match='2 x checkpoint'):
         check_free_space(tmp_path, {'estimated_checkpoint_bytes': 100})
+    logged = json.loads(capsys.readouterr().out.split('CHECKPOINT DISK BUDGET: ')[1])
+    assert logged['volume_cap_bytes'] == 1000 and logged['workspace_used_bytes'] == 801
+    assert logged['free_bytes_before_save'] == 199
     assert not list(tmp_path.iterdir())
-    monkeypatch.setattr(shutil, 'disk_usage', lambda _: usage._replace(free=200))
-    assert check_free_space(tmp_path, {'estimated_checkpoint_bytes': 100})['required_free_bytes'] == 200
+    report = check_free_space(tmp_path, {'estimated_checkpoint_bytes': 100})
+    assert report['volume_cap_bytes'] == 1000 and report['workspace_used_bytes'] == 800
+    assert report['free_bytes_before_save'] == report['required_free_bytes'] == 200
+    with pytest.raises(InsufficientCheckpointSpace, match='cap_minus_usage=-1'):
+        check_free_space(tmp_path, {'estimated_checkpoint_bytes': 100})
+    assert calls == [['du', '-sb', '--', str(tmp_path)]] * 3
+
+
+def test_default_cap_measures_entire_workspace_and_logs_usage(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv('WORKSPACE', str(tmp_path))
+    monkeypatch.delenv('VOLUME_CAP_GB', raising=False)
+    output = tmp_path / 'outputs/run'
+    output.mkdir(parents=True)
+    (tmp_path / 'weights').write_bytes(b'x' * 8192)
+    measured = int(subprocess.check_output(['du', '-sb', '--', str(tmp_path)], text=True).split('\t')[0])
+    report = check_free_space(output, {'estimated_checkpoint_bytes': 100})
+    assert report['volume_cap_bytes'] == 200_000_000_000
+    assert report['workspace_used_bytes'] == measured
+    assert report['free_bytes_before_save'] == 200_000_000_000 - measured
+    logged = json.loads(capsys.readouterr().out.split('CHECKPOINT DISK BUDGET: ')[1])
+    assert logged == report
+
+
+@pytest.mark.parametrize('cap', ['0', '-1', 'nan', 'Infinity', 'invalid', '0.0000000001'])
+def test_invalid_quota_pauses_before_write(tmp_path, monkeypatch, cap):
+    monkeypatch.setenv('WORKSPACE', str(tmp_path))
+    monkeypatch.setenv('VOLUME_CAP_GB', cap)
+    with pytest.raises(InsufficientCheckpointSpace, match='cannot determine volume quota/usage'):
+        check_free_space(tmp_path, {'estimated_checkpoint_bytes': 100})
+    assert not list(tmp_path.iterdir())
+
+
+def test_usage_failure_pauses_without_falling_back_to_df(tmp_path, monkeypatch):
+    import stage1_storage
+    monkeypatch.setenv('WORKSPACE', str(tmp_path))
+    monkeypatch.setenv('VOLUME_CAP_GB', '200')
+    def fail(command, **kwargs):
+        raise subprocess.CalledProcessError(1, command, stderr='Permission denied')
+    monkeypatch.setattr(stage1_storage.subprocess, 'run', fail)
+    with pytest.raises(InsufficientCheckpointSpace, match='Permission denied'):
+        check_free_space(tmp_path, {'estimated_checkpoint_bytes': 100})
+    assert not list(tmp_path.iterdir())
 
 
 def test_cache_checker_never_downloads_or_overwrites(tmp_path):

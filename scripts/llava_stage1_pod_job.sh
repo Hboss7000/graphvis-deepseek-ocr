@@ -3,6 +3,7 @@
 set -euo pipefail
 JOB=${1:?Use probe, smoke-first, smoke-resume, train, eval-dry or eval}
 export WORKSPACE=${WORKSPACE:-/workspace}
+export VOLUME_CAP_GB=${VOLUME_CAP_GB:-200}
 PROJECT="$WORKSPACE/bachelorArbeit"
 PY="$WORKSPACE/venvs/venv_train/bin/python"
 export HF_HOME="$WORKSPACE/.cache/huggingface"
@@ -30,8 +31,10 @@ cd "$PROJECT"
 test -n "${TMUX:-}" || { echo 'Use the documented tmux launch command.' >&2; exit 1; }
 exec 9>>"$WORKSPACE/.fullrun_gpu.lock"
 flock -n 9 || { echo 'Another GPU session holds the workspace lock.' >&2; exit 1; }
-trap 'rc=$?; df -h "$WORKSPACE"; if (( rc )); then echo "FAILED/PAUSED ($rc): STOP the Pod. Inspect logs before retrying."; else echo "JOB COMPLETED/PAUSED: STOP the Pod if finished."; fi' EXIT
+trap 'rc=$?; df -h "$WORKSPACE"; du -sh "$WORKSPACE"; if (( rc )); then echo "FAILED/PAUSED ($rc): STOP the Pod. Inspect logs before retrying."; else echo "JOB COMPLETED/PAUSED: STOP the Pod if finished."; fi' EXIT
 df -h "$WORKSPACE"
+du -sh "$WORKSPACE"
+echo "Configured volume cap: $VOLUME_CAP_GB GB"
 COMMON=(--data-dir "$DATA" --lora-lr "$LORA_LR" --projector-lr "$PROJECTOR_LR")
 if [[ "$BACKBONE" == qwen ]]; then
   COMMON+=(--token-diagnostics "$PROJECT/outputs/qwen_stage1_training_2026-10-06/token_diagnostics.json")

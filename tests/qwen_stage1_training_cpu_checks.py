@@ -38,7 +38,9 @@ def setup():
     return processor, config
 
 @pytest.fixture
-def examples(tmp_path):
+def examples(tmp_path, monkeypatch):
+    monkeypatch.setenv('WORKSPACE', str(tmp_path))
+    monkeypatch.setenv('VOLUME_CAP_GB', '200')
     Image.new('RGB',(16,16),'#ADD8E6').save(tmp_path/'a.png')
     Image.new('RGB',(32,16),'#ADD8E6').save(tmp_path/'b.png')
     return tmp_path, [

@@ -44,7 +44,9 @@ def setup():
 
 
 @pytest.fixture
-def examples(tmp_path):
+def examples(tmp_path, monkeypatch):
+    monkeypatch.setenv('WORKSPACE', str(tmp_path))
+    monkeypatch.setenv('VOLUME_CAP_GB', '200')
     Image.new('RGB', (16, 16), '#ADD8E6').save(tmp_path / 'a.png')
     Image.new('RGB', (32, 16), '#ADD8E6').save(tmp_path / 'b.png')
     return tmp_path, [
@@ -264,3 +266,19 @@ def test_validation_failure_keeps_update_and_replays_on_resume(setup, examples, 
                                  resume=checkpoint)
     assert result['complete'] and logger.has_event('validation', 2)
     logger.close()
+
+
+def test_quota_pause_preserves_last_checkpoint_before_creating_new_save(setup, examples, tmp_path, monkeypatch):
+    from stage1_storage import InsufficientCheckpointSpace
+    from llava_stage1_training import tree_sha
+    processor, config = setup
+    model, optimizer, scheduler = new_model(config)
+    first = tmp_path / 'checkpoint-000001'
+    contract = {'test': 'quota pause preserves resume'}
+    digest = save_checkpoint(model, optimizer, scheduler, first, contract, 1, 2)
+    monkeypatch.setenv('VOLUME_CAP_GB', '0.000000001')  # One-byte cap, below fixture usage.
+    with pytest.raises(InsufficientCheckpointSpace, match='cap_minus_usage='):
+        save_checkpoint(model, optimizer, scheduler, tmp_path / 'checkpoint-000002', contract, 2, 4)
+    assert tree_sha(first) == digest
+    assert not (tmp_path / 'checkpoint-000002').exists()
+    assert not (tmp_path / 'checkpoint-000002.incomplete').exists()

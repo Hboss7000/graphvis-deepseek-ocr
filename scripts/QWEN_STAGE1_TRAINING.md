@@ -40,7 +40,7 @@ verification/retention and plotting are shared with LLaVA.
 
 ## CPU evidence and reproducibility
 
-The combined CPU suite passed 66 checks; 43 documented Bash blocks and the shared
+The combined CPU suite passed 75 checks; 43 documented Bash blocks and the shared
 pod worker passed shell syntax validation. A CPU stand-in also executed every
 Qwen worker dispatch to validate interpreter, cache flags, native runners and
 shared input paths without using a GPU or contacting a pod.
@@ -110,10 +110,13 @@ The shared environment is `/workspace/venvs/venv_train`, never `venv_qwen` or
 
 ```bash
 export WORKSPACE=/workspace
+export VOLUME_CAP_GB=${VOLUME_CAP_GB:-200}
 export PROJECT="$WORKSPACE/bachelorArbeit"
 export SYSTEM_PYTHON=$(bash "$PROJECT/scripts/stage1_train_interpreter.sh" "$WORKSPACE")
 "$SYSTEM_PYTHON" -c 'import sys; print("Selected interpreter:",sys.executable); print("Python:",sys.version)'
 df -h "$WORKSPACE"
+du -sh "$WORKSPACE"
+printf 'Configured volume cap: %s GB\n' "$VOLUME_CAP_GB"
 ```
 
 The 2026-10-06 source exception is **approved**: only `torch==2.8.0+cu128` and
@@ -135,30 +138,44 @@ export PY=/workspace/venvs/venv_train/bin/python
 export PROJECT=/workspace/bachelorArbeit
 "$PY" "$PROJECT/scripts/stage1_weight_cache.py" --backbone qwen --cache /workspace/.cache/huggingface
 df -h /workspace
+du -sh /workspace
+printf 'Configured volume cap: %s GB\n' "${VOLUME_CAP_GB:-200}"
 ```
+
+RunPod's `df` reports the datacenter pool, so it is diagnostic only. Before
+**each** checkpoint save, the guard runs `du -sb -- /workspace` again and computes
+`remaining_bytes = VOLUME_CAP_GB * 1,000,000,000 - workspace_used_bytes`.
+`VOLUME_CAP_GB` defaults to **200 decimal GB**; set it to the actual volume quota.
+`WORKSPACE` selects the measured root when overridden. The log records cap bytes,
+used bytes, remaining bytes and the required `2 × checkpoint estimate`, including
+on an insufficient-space pause. Invalid caps or failed usage measurements also
+pause cleanly instead of falling back to pool space. The last intact checkpoint
+is preserved, and no new incomplete checkpoint directory is created. The configured
+cap is passed explicitly into tmux so a custom value reaches every save.
 
 Planning estimate from the pinned architecture: 349,175,808 LoRA parameters
 in float32; main bridge 40,119,040 and each DeepStack bridge 40,125,952 in bf16.
 Two AdamW moments at each parameter's dtype give **5,153,091,072 bytes per
 checkpoint (~5.15 GB, 4.80 GiB)**, plus scalar/serialization overhead. The saver
 records actual tensor bytes and dtypes, adds 5% + 1 MiB overhead, and requires
-**2 × that budget free (~10.08 GiB)** before EVERY save. It exits cleanly with code
+**2 × that budget remaining (~10.08 GiB)** before EVERY save. It exits cleanly with code
 75 if insufficient, preserving the last intact save. It verifies the new save
 before pruning and retains the latest two complete checkpoints. The final save
-is retained. `df -h /workspace` is logged at job start and end.
+is retained. Both `df -h /workspace` and `du -sh /workspace` are logged at job
+start and end.
 
 At most three checkpoints coexist inside one active run while publishing a new
-save: about 15.46 GB raw (16.24 GB with budget overhead). Assuming the user-stated
-70 GB already used includes cached weights, shared rendered inputs ~0.65 GB and
+save: about 15.46 GB raw (16.24 GB with budget overhead). If measured workspace usage of
+70 GB includes cached weights, shared rendered inputs ~0.65 GB and
 an explicit 0.25 GB evaluation/log allowance, training plus evaluation peaks at
 **~87.1 GB + new-venv size** for a run with no other new checkpoints on the volume.
 At a hypothetical 6 GB venv this is ~93.1 GB; these are estimates, not measured
-`df` values. The free-space rule still needs ~10.82 GB available before saving.
+`du` values. The quota guard still needs ~10.82 GB remaining before saving.
 Keeping the probe checkpoint and two smoke checkpoints adds another ~15.46 GB:
 **~102.6 GB + new-venv size** for the documented complete sequence. Retaining
-LLaVA artifacts adds its separately documented disk use too. This can exceed the
-100 GB volume. No checkpoints, cache files or volume are deleted/resized here.
-Inspect actual `df` and make an explicit storage decision before full training;
+LLaVA artifacts adds its separately documented disk use too. All these artifacts
+count toward the configured cap (default 200 GB). No checkpoints, cache files or volume are deleted/resized here.
+Inspect actual `du` usage and the configured cap before full training;
 the guard will pause safely if capacity is insufficient. Evaluation writes only
 predictions/metrics, no extra base-model copy or MLflow weight artifacts.
 
@@ -188,7 +205,7 @@ read -rp 'SSH port: ' POD_PORT
 read -rp 'SSH private key path: ' POD_KEY
 export RSYNC_RSH="ssh -p $POD_PORT -i \"$POD_KEY\""
 du -sh "$LOCAL_ROOT/outputs/llava_stage1_training_2026-10-06" "$LOCAL_ROOT/outputs/llava_stage1_eval_inputs" "$LOCAL_ROOT/outputs/qwen_stage1_training_2026-10-06"
-ssh -p "$POD_PORT" -i "$POD_KEY" "root@$POD_IP" 'cd /workspace/bachelorArbeit && git pull --ff-only && df -h /workspace'
+ssh -p "$POD_PORT" -i "$POD_KEY" "root@$POD_IP" 'cd /workspace/bachelorArbeit && git pull --ff-only && df -h /workspace && du -sh /workspace'
 rsync -a --checksum --ignore-existing -e "$RSYNC_RSH" "$LOCAL_ROOT/outputs/llava_stage1_training_2026-10-06/" "root@$POD_IP:$REMOTE_ROOT/outputs/llava_stage1_training_2026-10-06/"
 rsync -a --checksum --ignore-existing -e "$RSYNC_RSH" "$LOCAL_ROOT/outputs/llava_stage1_eval_inputs/" "root@$POD_IP:$REMOTE_ROOT/outputs/llava_stage1_eval_inputs/"
 rsync -a --checksum --ignore-existing -e "$RSYNC_RSH" "$LOCAL_ROOT/outputs/qwen_stage1_training_2026-10-06/" "root@$POD_IP:$REMOTE_ROOT/outputs/qwen_stage1_training_2026-10-06/"
@@ -232,6 +249,7 @@ speed. All launches use tmux, a GPU lock, volume-only caches and a log file.
 
 ```bash
 export WORKSPACE=/workspace
+export VOLUME_CAP_GB=${VOLUME_CAP_GB:-200}
 export PROJECT="$WORKSPACE/bachelorArbeit"
 export BACKBONE=qwen RUN_TAG=qwen_stage1
 export LORA_LR=2e-5 PROJECTOR_LR=2e-5
@@ -239,7 +257,7 @@ export PY="$WORKSPACE/venvs/venv_train/bin/python"
 export MAX_SECONDS=3600
 export LOG="$WORKSPACE/logs/qwen-probe_$(date -u +%Y%m%dT%H%M%SZ).log"
 mkdir -p "$WORKSPACE/logs"
-tmux new-session -d -s qwen-probe "env WORKSPACE='$WORKSPACE' BACKBONE='$BACKBONE' RUN_TAG='$RUN_TAG' LORA_LR='$LORA_LR' PROJECTOR_LR='$PROJECTOR_LR' MAX_SECONDS='$MAX_SECONDS' bash '$PROJECT/scripts/llava_stage1_pod_job.sh' probe >'$LOG' 2>&1"
+tmux new-session -d -s qwen-probe "env WORKSPACE='$WORKSPACE' VOLUME_CAP_GB='$VOLUME_CAP_GB' BACKBONE='$BACKBONE' RUN_TAG='$RUN_TAG' LORA_LR='$LORA_LR' PROJECTOR_LR='$PROJECTOR_LR' MAX_SECONDS='$MAX_SECONDS' bash '$PROJECT/scripts/llava_stage1_pod_job.sh' probe >'$LOG' 2>&1"
 tail -n 80 "$LOG"
 nvidia-smi
 ```
@@ -265,6 +283,7 @@ training can proceed. No training auto-launch follows smoke.
 
 ```bash
 export WORKSPACE=/workspace
+export VOLUME_CAP_GB=${VOLUME_CAP_GB:-200}
 export PROJECT="$WORKSPACE/bachelorArbeit"
 export BACKBONE=qwen RUN_TAG=qwen_stage1
 export LORA_LR=2e-5 PROJECTOR_LR=2e-5
@@ -274,7 +293,7 @@ export MAX_SECONDS=$("$PY" -c 'import json,math,sys; print(math.ceil(json.load(o
 cat "$PLAN"
 export LOG="$WORKSPACE/logs/qwen-smoke_$(date -u +%Y%m%dT%H%M%SZ).log"
 mkdir -p "$WORKSPACE/logs"
-tmux new-session -d -s qwen-smoke "env WORKSPACE='$WORKSPACE' BACKBONE='$BACKBONE' RUN_TAG='$RUN_TAG' LORA_LR='$LORA_LR' PROJECTOR_LR='$PROJECTOR_LR' MAX_SECONDS='$MAX_SECONDS' timeout --signal=INT --kill-after=120s $MAX_SECONDS bash -c 'bash \"$PROJECT/scripts/llava_stage1_pod_job.sh\" smoke-first && bash \"$PROJECT/scripts/llava_stage1_pod_job.sh\" smoke-resume' >'$LOG' 2>&1"
+tmux new-session -d -s qwen-smoke "env WORKSPACE='$WORKSPACE' VOLUME_CAP_GB='$VOLUME_CAP_GB' BACKBONE='$BACKBONE' RUN_TAG='$RUN_TAG' LORA_LR='$LORA_LR' PROJECTOR_LR='$PROJECTOR_LR' MAX_SECONDS='$MAX_SECONDS' timeout --signal=INT --kill-after=120s $MAX_SECONDS bash -c 'bash \"$PROJECT/scripts/llava_stage1_pod_job.sh\" smoke-first && bash \"$PROJECT/scripts/llava_stage1_pod_job.sh\" smoke-resume' >'$LOG' 2>&1"
 tail -n 80 "$LOG"
 nvidia-smi
 ```
@@ -296,6 +315,7 @@ export FETCHED="$PWD/outputs/qwen_stage1_fetched"
 
 ```bash
 export WORKSPACE=/workspace
+export VOLUME_CAP_GB=${VOLUME_CAP_GB:-200}
 export PROJECT="$WORKSPACE/bachelorArbeit"
 export BACKBONE=qwen RUN_TAG=qwen_stage1
 export LORA_LR=2e-5 PROJECTOR_LR=2e-5
@@ -306,7 +326,7 @@ cat "$PLAN"
 unset RESUME_CHECKPOINT
 export LOG="$WORKSPACE/logs/qwen-train_$(date -u +%Y%m%dT%H%M%SZ).log"
 mkdir -p "$WORKSPACE/logs"
-tmux new-session -d -s qwen-train "env WORKSPACE='$WORKSPACE' BACKBONE='$BACKBONE' RUN_TAG='$RUN_TAG' LORA_LR='$LORA_LR' PROJECTOR_LR='$PROJECTOR_LR' MAX_SECONDS='$MAX_SECONDS' bash '$PROJECT/scripts/llava_stage1_pod_job.sh' train >'$LOG' 2>&1"
+tmux new-session -d -s qwen-train "env WORKSPACE='$WORKSPACE' VOLUME_CAP_GB='$VOLUME_CAP_GB' BACKBONE='$BACKBONE' RUN_TAG='$RUN_TAG' LORA_LR='$LORA_LR' PROJECTOR_LR='$PROJECTOR_LR' MAX_SECONDS='$MAX_SECONDS' bash '$PROJECT/scripts/llava_stage1_pod_job.sh' train >'$LOG' 2>&1"
 tail -n 80 "$LOG"
 nvidia-smi
 ```
@@ -335,6 +355,7 @@ The initial dry evaluation has a one-hour job ceiling, not a measured estimate.
 
 ```bash
 export WORKSPACE=/workspace
+export VOLUME_CAP_GB=${VOLUME_CAP_GB:-200}
 export PROJECT="$WORKSPACE/bachelorArbeit"
 export BACKBONE=qwen RUN_TAG=qwen_stage1
 export LORA_LR=2e-5 PROJECTOR_LR=2e-5
@@ -345,7 +366,7 @@ export EVAL_TAG=smoke
 export ADAPTER_PATH="$WORKSPACE/outputs/$RUN_TAG/smoke/checkpoint-000020"
 export LOG="$WORKSPACE/logs/qwen-smoke-stage1-dry_$(date -u +%Y%m%dT%H%M%SZ).log"
 mkdir -p "$WORKSPACE/logs"
-tmux new-session -d -s qwen-smoke-stage1-dry "env WORKSPACE='$WORKSPACE' BACKBONE='$BACKBONE' RUN_TAG='$RUN_TAG' LORA_LR='$LORA_LR' PROJECTOR_LR='$PROJECTOR_LR' MAX_SECONDS='$MAX_SECONDS' EVAL_SCOPE='$EVAL_SCOPE' EVAL_TAG='$EVAL_TAG' ADAPTER_PATH='$ADAPTER_PATH' bash '$PROJECT/scripts/llava_stage1_pod_job.sh' eval-dry >'$LOG' 2>&1"
+tmux new-session -d -s qwen-smoke-stage1-dry "env WORKSPACE='$WORKSPACE' VOLUME_CAP_GB='$VOLUME_CAP_GB' BACKBONE='$BACKBONE' RUN_TAG='$RUN_TAG' LORA_LR='$LORA_LR' PROJECTOR_LR='$PROJECTOR_LR' MAX_SECONDS='$MAX_SECONDS' EVAL_SCOPE='$EVAL_SCOPE' EVAL_TAG='$EVAL_TAG' ADAPTER_PATH='$ADAPTER_PATH' bash '$PROJECT/scripts/llava_stage1_pod_job.sh' eval-dry >'$LOG' 2>&1"
 tail -n 80 "$LOG"
 nvidia-smi
 ```
@@ -357,6 +378,7 @@ smoke-adapter timing/verification cannot approve another adapter's evaluation.
 
 ```bash
 export WORKSPACE=/workspace
+export VOLUME_CAP_GB=${VOLUME_CAP_GB:-200}
 export PROJECT="$WORKSPACE/bachelorArbeit"
 export BACKBONE=qwen RUN_TAG=qwen_stage1
 export LORA_LR=2e-5 PROJECTOR_LR=2e-5
@@ -367,7 +389,7 @@ export EVAL_TAG=trained
 export ADAPTER_PATH="$WORKSPACE/outputs/$RUN_TAG/train/checkpoint-000450"
 export LOG="$WORKSPACE/logs/qwen-trained-stage1-dry_$(date -u +%Y%m%dT%H%M%SZ).log"
 mkdir -p "$WORKSPACE/logs"
-tmux new-session -d -s qwen-trained-stage1-dry "env WORKSPACE='$WORKSPACE' BACKBONE='$BACKBONE' RUN_TAG='$RUN_TAG' LORA_LR='$LORA_LR' PROJECTOR_LR='$PROJECTOR_LR' MAX_SECONDS='$MAX_SECONDS' EVAL_SCOPE='$EVAL_SCOPE' EVAL_TAG='$EVAL_TAG' ADAPTER_PATH='$ADAPTER_PATH' bash '$PROJECT/scripts/llava_stage1_pod_job.sh' eval-dry >'$LOG' 2>&1"
+tmux new-session -d -s qwen-trained-stage1-dry "env WORKSPACE='$WORKSPACE' VOLUME_CAP_GB='$VOLUME_CAP_GB' BACKBONE='$BACKBONE' RUN_TAG='$RUN_TAG' LORA_LR='$LORA_LR' PROJECTOR_LR='$PROJECTOR_LR' MAX_SECONDS='$MAX_SECONDS' EVAL_SCOPE='$EVAL_SCOPE' EVAL_TAG='$EVAL_TAG' ADAPTER_PATH='$ADAPTER_PATH' bash '$PROJECT/scripts/llava_stage1_pod_job.sh' eval-dry >'$LOG' 2>&1"
 tail -n 80 "$LOG"
 nvidia-smi
 ```
@@ -388,6 +410,7 @@ export FETCHED="$PWD/outputs/qwen_stage1_fetched"
 
 ```bash
 export WORKSPACE=/workspace
+export VOLUME_CAP_GB=${VOLUME_CAP_GB:-200}
 export PROJECT="$WORKSPACE/bachelorArbeit"
 export BACKBONE=qwen RUN_TAG=qwen_stage1
 export LORA_LR=2e-5 PROJECTOR_LR=2e-5
@@ -400,7 +423,7 @@ export EVAL_TAG=trained
 export ADAPTER_PATH="$WORKSPACE/outputs/$RUN_TAG/train/checkpoint-000450"
 export LOG="$WORKSPACE/logs/qwen-trained-stage1_$(date -u +%Y%m%dT%H%M%SZ).log"
 mkdir -p "$WORKSPACE/logs"
-tmux new-session -d -s qwen-trained-stage1 "env WORKSPACE='$WORKSPACE' BACKBONE='$BACKBONE' RUN_TAG='$RUN_TAG' LORA_LR='$LORA_LR' PROJECTOR_LR='$PROJECTOR_LR' MAX_SECONDS='$MAX_SECONDS' EVAL_SCOPE='$EVAL_SCOPE' EVAL_TAG='$EVAL_TAG' ADAPTER_PATH='$ADAPTER_PATH' bash '$PROJECT/scripts/llava_stage1_pod_job.sh' eval >'$LOG' 2>&1"
+tmux new-session -d -s qwen-trained-stage1 "env WORKSPACE='$WORKSPACE' VOLUME_CAP_GB='$VOLUME_CAP_GB' BACKBONE='$BACKBONE' RUN_TAG='$RUN_TAG' LORA_LR='$LORA_LR' PROJECTOR_LR='$PROJECTOR_LR' MAX_SECONDS='$MAX_SECONDS' EVAL_SCOPE='$EVAL_SCOPE' EVAL_TAG='$EVAL_TAG' ADAPTER_PATH='$ADAPTER_PATH' bash '$PROJECT/scripts/llava_stage1_pod_job.sh' eval >'$LOG' 2>&1"
 tail -n 80 "$LOG"
 nvidia-smi
 ```
@@ -413,6 +436,7 @@ estimate and independent approval so it can be omitted without discarding Stage 
 
 ```bash
 export WORKSPACE=/workspace
+export VOLUME_CAP_GB=${VOLUME_CAP_GB:-200}
 export PROJECT="$WORKSPACE/bachelorArbeit"
 export BACKBONE=qwen RUN_TAG=qwen_stage1
 export LORA_LR=2e-5 PROJECTOR_LR=2e-5
@@ -423,7 +447,7 @@ export EVAL_TAG=trained
 export ADAPTER_PATH="$WORKSPACE/outputs/$RUN_TAG/train/checkpoint-000450"
 export LOG="$WORKSPACE/logs/qwen-trained-qa-dry_$(date -u +%Y%m%dT%H%M%SZ).log"
 mkdir -p "$WORKSPACE/logs"
-tmux new-session -d -s qwen-trained-qa-dry "env WORKSPACE='$WORKSPACE' BACKBONE='$BACKBONE' RUN_TAG='$RUN_TAG' LORA_LR='$LORA_LR' PROJECTOR_LR='$PROJECTOR_LR' MAX_SECONDS='$MAX_SECONDS' EVAL_SCOPE='$EVAL_SCOPE' EVAL_TAG='$EVAL_TAG' ADAPTER_PATH='$ADAPTER_PATH' bash '$PROJECT/scripts/llava_stage1_pod_job.sh' eval-dry >'$LOG' 2>&1"
+tmux new-session -d -s qwen-trained-qa-dry "env WORKSPACE='$WORKSPACE' VOLUME_CAP_GB='$VOLUME_CAP_GB' BACKBONE='$BACKBONE' RUN_TAG='$RUN_TAG' LORA_LR='$LORA_LR' PROJECTOR_LR='$PROJECTOR_LR' MAX_SECONDS='$MAX_SECONDS' EVAL_SCOPE='$EVAL_SCOPE' EVAL_TAG='$EVAL_TAG' ADAPTER_PATH='$ADAPTER_PATH' bash '$PROJECT/scripts/llava_stage1_pod_job.sh' eval-dry >'$LOG' 2>&1"
 tail -n 80 "$LOG"
 nvidia-smi
 ```
@@ -444,6 +468,7 @@ export FETCHED="$PWD/outputs/qwen_stage1_fetched"
 
 ```bash
 export WORKSPACE=/workspace
+export VOLUME_CAP_GB=${VOLUME_CAP_GB:-200}
 export PROJECT="$WORKSPACE/bachelorArbeit"
 export BACKBONE=qwen RUN_TAG=qwen_stage1
 export LORA_LR=2e-5 PROJECTOR_LR=2e-5
@@ -456,7 +481,7 @@ export EVAL_TAG=trained
 export ADAPTER_PATH="$WORKSPACE/outputs/$RUN_TAG/train/checkpoint-000450"
 export LOG="$WORKSPACE/logs/qwen-trained-qa_$(date -u +%Y%m%dT%H%M%SZ).log"
 mkdir -p "$WORKSPACE/logs"
-tmux new-session -d -s qwen-trained-qa "env WORKSPACE='$WORKSPACE' BACKBONE='$BACKBONE' RUN_TAG='$RUN_TAG' LORA_LR='$LORA_LR' PROJECTOR_LR='$PROJECTOR_LR' MAX_SECONDS='$MAX_SECONDS' EVAL_SCOPE='$EVAL_SCOPE' EVAL_TAG='$EVAL_TAG' ADAPTER_PATH='$ADAPTER_PATH' bash '$PROJECT/scripts/llava_stage1_pod_job.sh' eval >'$LOG' 2>&1"
+tmux new-session -d -s qwen-trained-qa "env WORKSPACE='$WORKSPACE' VOLUME_CAP_GB='$VOLUME_CAP_GB' BACKBONE='$BACKBONE' RUN_TAG='$RUN_TAG' LORA_LR='$LORA_LR' PROJECTOR_LR='$PROJECTOR_LR' MAX_SECONDS='$MAX_SECONDS' EVAL_SCOPE='$EVAL_SCOPE' EVAL_TAG='$EVAL_TAG' ADAPTER_PATH='$ADAPTER_PATH' bash '$PROJECT/scripts/llava_stage1_pod_job.sh' eval >'$LOG' 2>&1"
 tail -n 80 "$LOG"
 nvidia-smi
 ```
