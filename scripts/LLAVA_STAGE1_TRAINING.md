@@ -10,11 +10,11 @@ audited native template, approved four merger bridges and Stage 1-first/optional
 QA commands. The combined CPU regression suite passed 66 checks; the original
 55-check LLaVA suite remains included. No pod step was executed.
 
-## Environment proposal (approval required before installation)
+## Approved environment and package sources
 
 Verified in `env/freeze_venv_qwen.txt`: torch 2.8.0+cu128, torchvision
 0.23.0+cu128, transformers 5.16.1, accelerate 1.15.0. PEFT and MLflow are absent.
-Do not modify `venv_qwen`. Proposed separate Python 3.12 environment:
+Do not modify `venv_qwen`. The approved separate training environment uses:
 PEFT 0.21.2, accelerate 1.15.0, MLflow 3.16.1. The initially proposed MLflow 2.22.2
 was rejected by the resolver because it requires packaging<25 while COMA pins
 packaging==26.3. No COMA dependency was downgraded. MLflow 3.16.1 supports that
@@ -42,12 +42,15 @@ df -h "$WORKSPACE"
 
 The exact installation commands are in `llava_stage1_pod_setup.sh`, launched in
 tmux below. Environment installation does not download or overwrite weights.
-The last installation approval said **PyPI only**. PyPI does not publish the exact
-`torch==2.8.0+cu128` / `torchvision==0.23.0+cu128` requirement versions, so setup
-refuses before creating the venv unless a source exception for the official CUDA
-index is separately granted (`ALLOW_PYTORCH_CUDA_INDEX=yes`). Other packages use
-PyPI, pinned constraints remain unchanged, and no other installs occur. No pip
-cache is written; installation temporary files stay inside the new venv.
+The 2026-10-06 approval permits the official PyTorch cu128 index
+(`https://download.pytorch.org/whl/cu128`) for **only** `torch==2.8.0+cu128` and
+`torchvision==0.23.0+cu128`, replacing the earlier PyPI-only restriction for those
+two wheels. Setup installs them with `--no-deps` and no extra index. A second
+install uses **only PyPI** for the remaining requirements and all dependencies.
+Pins and constraints remain unchanged. Inherited extra-index and find-links
+settings are cleared, and pip configuration is disabled. No additional opt-in
+flag is needed for this approved exception. No pip cache is written; installation
+temporary files stay inside the new venv. This update does not execute an install.
 
 The approved laptop environment was installed separately in `.venv_llava_cpu`:
 
@@ -261,15 +264,16 @@ The isolated installation commands in the first section are also packaged in
 `scripts/llava_stage1_pod_setup.sh`; it checks the pinned cache read-only.
 A complete snapshot is reused and all weight downloads are skipped. An incomplete
 snapshot is reported without downloading or overwriting the cache; offline jobs
-must wait for a separately authorized cache fill. No model cache is altered. Invoke it **only after separate GPU-pod and environment approval**:
+must wait for a separately authorized cache fill. No model cache is altered.
+The environment and two-wheel source exception are approved. Invoke setup **only
+on a separately authorized GPU pod**:
 
 ```bash
 export WORKSPACE=/workspace
 export PROJECT="$WORKSPACE/bachelorArbeit"
 export LOG="$WORKSPACE/logs/llava_stage1_setup_$(date -u +%Y%m%dT%H%M%SZ).log"
-export ALLOW_PYTORCH_CUDA_INDEX=${ALLOW_PYTORCH_CUDA_INDEX:-no}
 mkdir -p "$WORKSPACE/logs"
-tmux new-session -d -s llava-setup "env WORKSPACE='$WORKSPACE' ALLOW_PYTORCH_CUDA_INDEX='$ALLOW_PYTORCH_CUDA_INDEX' timeout --signal=INT --kill-after=120s 14400 bash '$PROJECT/scripts/llava_stage1_pod_setup.sh' >'$LOG' 2>&1"
+tmux new-session -d -s llava-setup "env WORKSPACE='$WORKSPACE' timeout --signal=INT --kill-after=120s 14400 bash '$PROJECT/scripts/llava_stage1_pod_setup.sh' >'$LOG' 2>&1"
 tail -n 80 "$LOG"
 nvidia-smi
 ```

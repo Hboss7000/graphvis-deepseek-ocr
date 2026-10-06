@@ -36,7 +36,19 @@
   "model_id": "Qwen/Qwen3-VL-8B-Instruct",
   "model_revision": "0c351dd01ed87e9c1b53cbc748cba10e6187ff3b",
   "model_weights_downloaded": false,
-  "pod_environment_blocker": "PyPI-only approval cannot satisfy exact +cu128 distribution pins; no source exception granted and no pod install attempted.",
+  "pod_environment_blocker": null,
+  "pod_environment_source_approval": {
+    "all_other_packages_and_dependencies": "PyPI only",
+    "cuda_index": "https://download.pytorch.org/whl/cu128",
+    "cuda_index_packages": [
+      "torch==2.8.0+cu128",
+      "torchvision==0.23.0+cu128"
+    ],
+    "date": "2026-10-06",
+    "install_executed": false,
+    "pins_changed": false,
+    "verification": "CPU stand-in verified two-wheel --no-deps CUDA phase, PyPI-only dependency phase, cleared extra-index/find-links settings, pip-check/freeze dispatch and preserved cache/other environment; 43 documented Bash blocks and setup script pass bash -n."
+  },
   "pod_steps_executed": false,
   "processor_assets_manifest_sha256": "480e7c3e4a28b8c0023e4b05ad910473ae3dc05e4641072eaf06944b0db8028b",
   "shell_validation": {

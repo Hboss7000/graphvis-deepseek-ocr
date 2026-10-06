@@ -116,14 +116,14 @@ export SYSTEM_PYTHON=$(bash "$PROJECT/scripts/stage1_train_interpreter.sh" "$WOR
 df -h "$WORKSPACE"
 ```
 
-**The earlier PyPI-only environment approval cannot install the documented exact
-`torch==2.8.0+cu128` / `torchvision==0.23.0+cu128` wheels.** Setup stops before venv
-creation unless a separate official PyTorch CUDA-index source exception is
-approved. The [PyPI release files](https://pypi.org/project/torch/2.8.0/#files)
-use the unqualified version; the exact local-version CUDA wheels are in the
-[official cu128 index](https://download.pytorch.org/whl/cu128/torch/).
-Other packages remain pinned from PyPI. Nothing was installed on the
-pod in this turn. Once a compliant `venv_train` exists, both backbones use it.
+The 2026-10-06 source exception is **approved**: only `torch==2.8.0+cu128` and
+`torchvision==0.23.0+cu128` use the official PyTorch index
+(`https://download.pytorch.org/whl/cu128`). Setup installs these two wheels with
+`--no-deps` and no extra index, then installs all dependencies and other
+requirements from **PyPI only**. All pins and constraints stay unchanged. The
+previous `ALLOW_PYTORCH_CUDA_INDEX` gate is removed; no further source approval
+is needed for these two wheels. No install or pod step was executed in this
+update. Once `venv_train` exists, both backbones use it.
 
 The pinned Qwen weight snapshot must already be complete in
 `/workspace/.cache/huggingface`. The preflight and every pod job check it read-only,
