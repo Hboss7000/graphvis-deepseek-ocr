@@ -18,43 +18,62 @@ STAGE = ROOT / 'experiments/2026-09-04_stage1_graph_comprehension_zero_shot/scri
 QA = ROOT / 'experiments/2026-08-25_zero_shot_obqa_500_multimodal/scripts/run_zero_shot_llava.py'
 
 
-def jobs(phase, adapter, data, dry_inputs, output):
+def jobs(phase, adapter, data, dry_inputs, output, backbone='llava', scope='all'):
     count, qa_count = (9, 8) if phase == 'dry' else (900, 500)
     stage_input = dry_inputs / 'stage1_dry.jsonl' if phase == 'dry' else data / 'test/stage1_subset100.jsonl'
     qa_input = dry_inputs / 'qa_dry.jsonl' if phase == 'dry' else data / 'test/stage2_obqa_0_500.jsonl'
+    stage_runner, qa_runner = STAGE, QA
+    if backbone == 'qwen':
+        stage_runner = Path(str(STAGE).replace('run_stage1_llava.py', 'run_stage1_qwen.py'))
+        qa_runner = Path(str(QA).replace('run_zero_shot_llava.py', 'run_zero_shot_qwen.py'))
     common = ['--adapter', str(adapter), '--image-root', str(data), '--graph-metadata',
               str(data / 'test/graph_metadata_0_500.jsonl'), '--prompt-template', 'llava_v1', '--seed', '13']
     result = []
-    for name, prefix in [('stage1', 'none'), ('stage1_prefix', 'gold-template')]:
-        command = [sys.executable, str(STAGE), *common, '--input-jsonl', str(stage_input),
+    if backbone == 'qwen':
+        from qwen_stage1_training import DEFAULT_REVISION as qwen_revision
+        common = ['--adapter', str(adapter), '--image-root', str(data), '--graph-metadata',
+                  str(data / 'test/graph_metadata_0_500.jsonl'), '--revision', qwen_revision,
+                  '--min-pixels', '262144', '--max-pixels', '1310720']
+    arms = [('stage1', 'none'), ('stage1_prefix', 'gold-template')] if backbone == 'llava' else [('stage1', 'none')]
+    for name, prefix in (arms if scope != 'qa' else []):
+        command = [sys.executable, str(stage_runner), *common, '--input-jsonl', str(stage_input),
                    '--output-dir', str(output / name), '--expected-count', str(count), '--task-set', 'extended',
                    '--extractor', 'span_extended', '--answer-format', 'none', '--max-new-tokens', '1024',
                    '--assistant-prefix-mode', prefix, '--approve-prompts', '--resume']
+        if backbone == 'qwen':
+            i = command.index('--assistant-prefix-mode')
+            del command[i:i+2]
+            command += ['--seed', '13']
         result.append((name, command))
-    for condition in ('image', 'text_noref', 'text', 'kg_text'):
+    for condition in (('image', 'text_noref', 'text', 'kg_text') if scope != 'stage1' else ()):
         name = 'qa_' + condition
-        command = [sys.executable, str(QA), *common, '--input-jsonl', str(qa_input),
+        command = [sys.executable, str(qa_runner), *common, '--input-jsonl', str(qa_input),
                    '--output-jsonl', str(output / name / 'predictions.jsonl'), '--expected-count', str(qa_count),
                    '--condition', condition, '--max-new-tokens', '64', '--approve-prompt-diff', '--resume']
         result.append((name, command))
     return result
 
 
-def code_hashes():
-    return {str(p.relative_to(ROOT)): file_sha(p) for p in (STAGE, QA,
+def code_hashes(backbone='llava'):
+    stage = STAGE if backbone == 'llava' else Path(str(STAGE).replace('run_stage1_llava.py', 'run_stage1_qwen.py'))
+    qa = QA if backbone == 'llava' else Path(str(QA).replace('run_zero_shot_llava.py', 'run_zero_shot_qwen.py'))
+    return {str(p.relative_to(ROOT)): file_sha(p) for p in (stage, qa,
+        ROOT / 'scripts/llava_stage1_training.py',
+        *((ROOT / 'scripts/qwen_stage1_training.py',) if backbone == 'qwen' else ()),
         ROOT / 'scripts/llava_adapter.py', ROOT / 'scripts/llava_stage1_prompt.py',
         ROOT / 'scripts/llava_common.py', ROOT / 'scripts/evaluate_llava_stage1_adapter.py',
         ROOT / 'experiments/2026-09-04_stage1_graph_comprehension_zero_shot/scripts/score_stage1.py',
         ROOT / 'experiments/2026-08-25_zero_shot_obqa_500_multimodal/scripts/prompt_common.py')}
 
 
-def summarize(directory, phase):
+def summarize(directory, phase, backbone='llava', scope='all'):
     expected = 9 if phase == 'dry' else 900
     tasks = {}
     total_seconds = 0.
     peak = 0
     artifact_hashes = set()
-    for name in ('stage1', 'stage1_prefix', 'qa_image', 'qa_text_noref', 'qa_text', 'qa_kg_text'):
+    names = [name for name, _ in jobs(phase, Path('.'), Path('.'), Path('.'), directory, backbone, scope)]
+    for name in names:
         folder = directory / name
         config = json.loads((folder / 'run_config.json').read_text())
         artifact_hashes.add(config['adapter']['sha256'])
@@ -75,7 +94,7 @@ def summarize(directory, phase):
                        'ceiling_count': sum(r['hit_token_ceiling'] for r in rows)}
     if len(artifact_hashes) != 1:
         raise ValueError('Evaluation jobs used different adapters')
-    return {'passed': True, 'phase': phase, 'adapter_sha256': artifact_hashes.pop(),
+    return {'passed': True, 'phase': phase, 'backbone': backbone, 'scope': scope, 'adapter_sha256': artifact_hashes.pop(),
             'jobs': tasks, 'full_extrapolated_seconds': total_seconds,
             'estimated_hours': total_seconds / 3600, 'estimated_cost_usd': total_seconds / 3600 * 2.09,
             'guard_hours': total_seconds / 3600 * 1.5, 'peak_vram_bytes': peak,
@@ -84,6 +103,8 @@ def summarize(directory, phase):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument('--backbone', choices=('llava', 'qwen'), default='llava')
+    p.add_argument('--scope', choices=('all', 'stage1', 'qa'), default='all')
     p.add_argument('--phase', choices=('dry', 'full'), required=True)
     p.add_argument('--adapter', type=Path, required=True)
     p.add_argument('--data-dir', type=Path, required=True)
@@ -93,7 +114,7 @@ def main():
     p.add_argument('--dry-report', type=Path)
     p.add_argument('--print-only', action='store_true')
     args = p.parse_args()
-    commands = jobs(args.phase, args.adapter, args.data_dir, args.dry_inputs, args.output_dir)
+    commands = jobs(args.phase, args.adapter, args.data_dir, args.dry_inputs, args.output_dir, args.backbone, args.scope)
     if args.print_only:
         for name, command in commands:
             print(name + ': ' + json.dumps(command))
@@ -107,14 +128,18 @@ def main():
     for name, digest in manifest['dry_files_sha256'].items():
         if file_sha(args.dry_inputs / name) != digest:
             raise ValueError('Evaluation dry input changed')
-    artifact = adapter_provenance(args.adapter, DEFAULT_MODEL_ID, DEFAULT_REVISION)
+    model_id, revision = DEFAULT_MODEL_ID, DEFAULT_REVISION
+    if args.backbone == 'qwen':
+        from qwen_stage1_training import DEFAULT_MODEL_ID as model_id, DEFAULT_REVISION as revision
+    artifact = adapter_provenance(args.adapter, model_id, revision)
     if args.phase == 'full':
         if not args.dry_report:
             raise ValueError('Full evaluation requires the same-adapter rehearsal report')
         dry = json.loads(args.dry_report.read_text())
         if (not dry.get('passed') or dry.get('phase') != 'dry'
-                or dry['adapter_sha256'] != artifact['sha256'] or dry['code_sha256'] != code_hashes()
-                or dry.get('inputs') != manifest):
+                or dry['adapter_sha256'] != artifact['sha256'] or dry['code_sha256'] != code_hashes(args.backbone)
+                or dry.get('inputs') != manifest or dry.get('backbone', 'llava') != args.backbone
+                or dry.get('scope', 'all') != args.scope):
             raise ValueError('Rehearsal adapter/code mismatch; fix then repeat the dry evaluation')
     args.output_dir.mkdir(parents=True, exist_ok=True)
     args.log_dir.mkdir(parents=True, exist_ok=True)
@@ -126,7 +151,7 @@ def main():
             print(f'FAILED {name}: STOP the Pod; inspect its log.', flush=True)
             raise RuntimeError(f'Evaluation failed: {name}')
         print(f'COMPLETED {name}: STOP the Pod if pausing the session.', flush=True)
-    report = {**summarize(args.output_dir, args.phase), 'code_sha256': code_hashes(), 'inputs': manifest}
+    report = {**summarize(args.output_dir, args.phase, args.backbone, args.scope), 'code_sha256': code_hashes(args.backbone), 'inputs': manifest}
     (args.output_dir / 'evaluation_report.json').write_text(json.dumps(report, indent=2, sort_keys=True) + '\n')
     print(json.dumps(report, indent=2), flush=True)
     print('EVALUATION COMPLETED: STOP the Pod.', flush=True)

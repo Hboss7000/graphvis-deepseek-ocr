@@ -63,6 +63,7 @@ MODEL_NAME = "qwen"
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model-id", default=DEFAULT_MODEL_ID)
+    parser.add_argument("--adapter", type=Path, help="Verified Stage 1 checkpoint; use separate tuned outputs")
     parser.add_argument("--revision", default=DEFAULT_REVISION)
     parser.add_argument("--input-jsonl", type=Path, required=True)
     parser.add_argument("--graph-metadata", type=Path, required=True)
@@ -215,10 +216,16 @@ def main() -> None:
     if unknown_done:
         raise ValueError(f"Existing predictions are not in the current input: {sorted(unknown_done)[:10]}")
 
+    if args.adapter:
+        from llava_adapter import adapter_provenance
+        adapter_provenance(args.adapter, args.model_id, args.revision)
     load_started = perf_counter()
     model, dtype_argument, resolved_dtype = load_model(
         Qwen3VLForConditionalGeneration, torch, args
     )
+    if args.adapter:
+        from llava_adapter import load_adapter
+        model, artifact = load_adapter(model, args.adapter, args.model_id, args.revision)
     loading_seconds = perf_counter() - load_started
     run_config = {
         "model_name": MODEL_NAME,
@@ -292,6 +299,9 @@ def main() -> None:
     }
     if args.task_set != "paper":
         run_config["task_set"] = args.task_set
+    if args.adapter:
+        run_config['adapter'] = artifact
+        run_config['prompt_template'] = 'qwen-native-no-system'
     run_config = enrich_config(run_config)
     write_run_config(args.output_dir, run_config)
     runtime_path = args.output_dir / "runtime_metrics.json"
@@ -315,6 +325,9 @@ def main() -> None:
             if key in done:
                 continue
             begin_item()
+            if args.adapter:
+                torch.cuda.synchronize()
+                item_started = perf_counter()
             image_path = args.image_root / record["image"]
             if not image_path.is_file():
                 raise FileNotFoundError(f"Missing graph image: {image_path}")
@@ -356,6 +369,9 @@ def main() -> None:
                 "timestamp_utc": datetime.now(timezone.utc).isoformat(),
             }
             handle = handles[task]
+            if args.adapter:
+                torch.cuda.synchronize()
+                result['item_elapsed_seconds'] = perf_counter() - item_started
             finish_item(result)
             handle.write(json.dumps(result, ensure_ascii=False) + "\n")
             handle.flush()

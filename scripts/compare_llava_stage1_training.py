@@ -27,13 +27,21 @@ def read_rows(path):
     return [json.loads(line) for line in Path(path).read_text().splitlines() if line.strip()]
 
 
-def verify_config(config, input_path, template, prefix, tuned, cap):
+def verify_config(config, input_path, template, prefix, tuned, cap, backbone='llava'):
+    model_id, revision = DEFAULT_MODEL_ID, DEFAULT_REVISION
+    if backbone == 'qwen':
+        from qwen_stage1_training import DEFAULT_MODEL_ID as model_id, DEFAULT_REVISION as revision
+        bounds = config.get('image_processing', config)
+        if (bounds.get('min_pixels'), bounds.get('max_pixels')) != (262144, 1310720):
+            raise ValueError('Qwen pixel bounds differ')
+        if config.get('default_system_prompt_injected') is not False:
+            raise ValueError('Qwen must use no default system prompt')
     if (config['model_id'], config['model_revision'], config.get('seed')) != (
-            DEFAULT_MODEL_ID, DEFAULT_REVISION, 13):
+            model_id, revision, 13):
         raise ValueError('Comparison model/revision/seed differs')
     if config['input_jsonl']['sha256'] != file_sha(input_path):
         raise ValueError('Comparison input differs')
-    if config.get('prompt_template', 'hf-chat') != template or config.get('assistant_prefix_mode', 'none') != prefix:
+    if config.get('prompt_template', 'qwen-native-no-system' if backbone == 'qwen' else 'hf-chat') != template or config.get('assistant_prefix_mode', 'none') != prefix:
         raise ValueError('Comparison arm prompt differs')
     if bool(config.get('adapter')) != tuned:
         raise ValueError('Comparison adapter status differs')
@@ -46,19 +54,20 @@ def verify_config(config, input_path, template, prefix, tuned, cap):
         raise ValueError('Missing tuned adapter checksum')
 
 
-def compare_stage(directories, source, metadata):
+def compare_stage(directories, source, metadata, backbone='llava'):
+    arms = ARMS if backbone == 'llava' else {'main': ('qwen-native-no-system','none',False), 'tuned': ('qwen-native-no-system','none',True)}
     results = {}
-    for name, (template, prefix, tuned) in ARMS.items():
+    for name, (template, prefix, tuned) in arms.items():
         directory = directories[name]
         if not directory.exists():
             results[name] = {'status': 'missing', 'path': str(directory), 'metrics': None}
             continue
         config = json.loads((directory / 'run_config.json').read_text())
-        verify_config(config, source, template, prefix, tuned, 1024)
+        verify_config(config, source, template, prefix, tuned, 1024, backbone)
         if config['graph_metadata']['sha256'] != file_sha(metadata):
             raise ValueError('Comparison metadata differs')
         metrics, _ = score_files(SimpleNamespace(input_jsonl=source, graph_metadata=metadata,
-            predictions_dir=directory, model_name='llava', task_set='extended', extractor='span_extended'))
+            predictions_dir=directory, model_name=backbone, task_set='extended', extractor='span_extended'))
         if metrics['input_record_count'] != 900 or any(n != 100 for n in metrics['task_record_counts'].values()):
             raise ValueError('Expected all 100 graphs x nine tasks in comparison')
         results[name] = {'status': 'complete', 'path': str(directory), 'metrics': metrics,
@@ -71,8 +80,8 @@ def compare_stage(directories, source, metadata):
     return results
 
 
-def compare_qa(directory, source, tuned):
-    if not directory.exists():
+def compare_qa(directory, source, tuned, backbone='llava'):
+    if not directory.exists() or not any((directory / f'qa_{c}').exists() for c in ('image','text_noref','text','kg_text')):
         return {'status': 'missing', 'metrics': None}
     expected = {int(r['statement_idx']): r for r in read_rows(source)}
     if len(expected) != 500:
@@ -82,7 +91,8 @@ def compare_qa(directory, source, tuned):
     for condition in ('image', 'text_noref', 'text', 'kg_text'):
         folder = directory / f'qa_{condition}'
         config = json.loads((folder / 'run_config.json').read_text())
-        verify_config(config, source, 'llava_v1' if tuned else 'hf-chat', 'none', tuned, 64)
+        verify_config(config, source, ('qwen-native-no-system' if backbone == 'qwen' else
+            ('llava_v1' if tuned else 'hf-chat')), 'none', tuned, 64, backbone)
         if tuned:
             adapter_hashes.add(config['adapter']['sha256'])
         if config['condition'] != condition:
@@ -110,29 +120,35 @@ def compare_qa(directory, source, tuned):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument('--backbone', choices=('llava','qwen'), default='llava')
+    p.add_argument('--stage1-only', action='store_true', help='QA was deliberately cut; still compare all nine Stage 1 tasks')
     p.add_argument('--data-dir', type=Path, default=ROOT / 'outputs/fullrun_2026-10-04_B')
     baseline = ROOT / 'outputs/fullrun_2026-10-04_B_results/llava'
-    p.add_argument('--main', type=Path, default=baseline / 'stage1')
+    p.add_argument('--main', type=Path)
     for name in ('P2', 'P3'):
         p.add_argument('--' + name.lower(), type=Path,
             default=ROOT / 'outputs/llava_stage1_diagnostics_2026-10-05/full' / name)
     p.add_argument('--tuned', type=Path, required=True, help='Fetched evaluation root containing stage1/ and qa_CONDITION/')
-    p.add_argument('--qa-main', type=Path, default=baseline)
+    p.add_argument('--qa-main', type=Path)
     p.add_argument('--output-dir', type=Path, required=True)
     args = p.parse_args()
+    baseline = ROOT / f'outputs/fullrun_2026-10-04_B_results/{args.backbone}'
+    args.main = args.main or baseline / 'stage1'
+    args.qa_main = args.qa_main or baseline
     directories = {'main': args.main, 'P2': args.p2, 'P3': args.p3,
                    'tuned': args.tuned / 'stage1', 'tuned-prefix': args.tuned / 'stage1_prefix'}
     results = compare_stage(directories, args.data_dir / 'test/stage1_subset100.jsonl',
-                            args.data_dir / 'test/graph_metadata_0_500.jsonl')
+                            args.data_dir / 'test/graph_metadata_0_500.jsonl', args.backbone)
     report = {'stage1': results, 'qa': {
-        'main': compare_qa(args.qa_main, args.data_dir / 'test/stage2_obqa_0_500.jsonl', False),
-        'tuned': compare_qa(args.tuned, args.data_dir / 'test/stage2_obqa_0_500.jsonl', True)},
+        'main': ({'status':'cut','metrics':None} if args.stage1_only else compare_qa(args.qa_main, args.data_dir / 'test/stage2_obqa_0_500.jsonl', False, args.backbone)),
+        'tuned': ({'status':'cut','metrics':None} if args.stage1_only else compare_qa(args.tuned, args.data_dir / 'test/stage2_obqa_0_500.jsonl', True, args.backbone))},
         'paper_table4_percent': {task: {'original': v[0], 'after_printed': v[1]} for task, v in PAPER.items()},
         'paper_edge_number_discrepancy': {'printed': 16.2, 'request_gain_derived': 19.4, 'printed_gain': 9.7},
         'notes': ['Existing span_extended Stage 1 scorer and shared strict-64 QA parser; no scorer changes.',
                   'Held-out relation/neighbor/path tasks measure transfer.',
                   'Paper CSQA exact-match scores are directional references, not directly comparable headline metrics.',
                   'Unavailable arms are explicit missing results, never zeros.']}
+    report['backbone'] = args.backbone
     adapters = {arm['adapter_sha256'] for arm in results.values()
                 if arm['status'] == 'complete' and arm.get('adapter_sha256')}
     if report['qa']['tuned'].get('adapter_sha256'):
@@ -152,13 +168,13 @@ def main():
         return result
     with (args.output_dir / 'stage1_comparison.csv').open('w', newline='') as handle:
         writer = csv.writer(handle)
-        writer.writerow(['task', 'metric', 'held_out_transfer', *ARMS])
+        writer.writerow(['task', 'metric', 'held_out_transfer', *results])
         for task in TASK_SETS['extended']:
             values = {name: flatten(result['metrics']['tasks'][task]) if result['metrics'] else {}
                       for name, result in results.items()}
             for metric in sorted({key for value in values.values() for key in value}):
                 writer.writerow([task, metric, task not in PAPER,
-                                 *(values[name].get(metric, '') for name in ARMS)])
+                                 *(values[name].get(metric, '') for name in results)])
     with (args.output_dir / 'paper_reference.csv').open('w', newline='') as handle:
         writer = csv.writer(handle)
         writer.writerow(['task', 'original_percent', 'after_printed_percent', 'after_request_percent'])

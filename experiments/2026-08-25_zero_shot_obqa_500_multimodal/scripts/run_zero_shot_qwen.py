@@ -13,6 +13,7 @@ import difflib
 import json
 from collections import Counter
 from datetime import datetime, timezone
+from time import perf_counter
 from pathlib import Path
 
 from prompt_common import (
@@ -44,6 +45,7 @@ ATTN_IMPLEMENTATION = "sdpa"
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model-id", default=DEFAULT_MODEL_ID)
+    parser.add_argument("--adapter", type=Path, help="Verified Stage 1 checkpoint; use separate tuned outputs")
     parser.add_argument(
         "--revision",
         help="Immutable Hugging Face revision/commit; required for inference",
@@ -421,6 +423,11 @@ def write_run_config(
             "Phase-1 and planned QA runs use the common 64-token ceiling for every model."
         ),
     }
+    if getattr(args, 'adapter', None):
+        from llava_adapter import adapter_provenance
+        config['adapter'] = adapter_provenance(args.adapter, args.model_id, args.revision)
+        config['seed'] = 13
+        config['prompt_template'] = 'qwen-native-no-system'
     config = enrich_config(config)
     config_path = args.output_jsonl.parent / "run_config.json"
     if config_path.exists():
@@ -505,9 +512,18 @@ def main() -> None:
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is required, but no GPU is visible. Run this through sbatch.")
 
+    if args.adapter:
+        from llava_adapter import adapter_provenance
+        adapter_provenance(args.adapter, args.model_id, args.revision)
+        transformers.set_seed(13)
+    load_started = perf_counter()
     model, dtype_argument, resolved_dtype = load_model(
         Qwen3VLForConditionalGeneration, torch, args
     )
+    if args.adapter:
+        from llava_adapter import load_adapter
+        model, _ = load_adapter(model, args.adapter, args.model_id, args.revision)
+    loading_seconds = perf_counter() - load_started
     done = completed_indices(args.output_jsonl) if args.resume else set()
     args.output_jsonl.parent.mkdir(parents=True, exist_ok=True)
     write_run_config(
@@ -522,6 +538,10 @@ def main() -> None:
         first_image_budget,
     )
 
+    if args.adapter:
+        runtime_path = args.output_jsonl.parent / 'runtime_metrics.json'
+        if not runtime_path.exists():
+            runtime_path.write_text(json.dumps({'loading_elapsed_seconds': loading_seconds}) + '\n')
     records = selected_records(records, args)
     parse_tier_counts = Counter()
     if args.resume and args.output_jsonl.exists():
@@ -535,6 +555,10 @@ def main() -> None:
             if statement_idx in done:
                 continue
             begin_item()
+            if args.adapter:
+                torch.cuda.synchronize()
+                torch.cuda.reset_peak_memory_stats()
+                item_started = perf_counter()
 
             kg_block = (
                 format_kg_block(metadata_by_idx[statement_idx])
@@ -572,6 +596,10 @@ def main() -> None:
                 "model_revision": args.revision,
                 "timestamp_utc": datetime.now(timezone.utc).isoformat(),
             }
+            if args.adapter:
+                torch.cuda.synchronize()
+                result['item_elapsed_seconds'] = perf_counter() - item_started
+                result['peak_memory_allocated_bytes'] = int(torch.cuda.max_memory_allocated())
             finish_item(result)
             output.write(json.dumps(result) + "\n")
             output.flush()

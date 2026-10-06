@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 
-def plan(probe, smoke=None, evaluation_dry=None):
+def plan(probe, smoke=None, evaluation_dry=None, qa_evaluation_dry=None):
     if not probe.get('passed'):
         raise ValueError('A successful measured real-model dry report is required')
     if probe.get('dtype') != 'bf16' or 'RTX PRO 6000' not in probe.get('gpu_type', ''):
@@ -31,11 +31,22 @@ def plan(probe, smoke=None, evaluation_dry=None):
         estimates['train'] = (smoke['full_training_compute_hours'] * 3600
             + 5 * validation_seconds * 600 / smoke['validation_examples'] + 5 * checkpoint_seconds + 2 * overhead)
         notes.append('Training estimate adds five 600-record validations scaled from smoke, checkpoint time and load overhead; wall-time checkpoint saves may add more.')
-    if evaluation_dry:
-        if not evaluation_dry.get('passed') or evaluation_dry.get('phase') != 'dry':
+    for evaluation in (evaluation_dry, qa_evaluation_dry):
+        if not evaluation:
+            continue
+        if not evaluation.get('passed') or evaluation.get('phase') != 'dry':
             raise ValueError('Evaluation cost requires successful same-adapter dry evidence')
-        estimates['eval'] = evaluation_dry['full_extrapolated_seconds']
+        scope = evaluation.get('scope', 'all')
+        key = 'eval' if scope == 'all' else 'eval_' + scope
+        if key in estimates:
+            raise ValueError('Duplicate evaluation scope')
+        estimates[key] = evaluation['full_extrapolated_seconds']
         notes.append('Evaluation estimate scales the same adapter/template/scorer dry predictions to 900 Stage 1 rows per arm and 500 QA rows per condition.')
+    if evaluation_dry and qa_evaluation_dry:
+        if (evaluation_dry.get('adapter_sha256') != qa_evaluation_dry.get('adapter_sha256')
+                or evaluation_dry.get('backbone') != qa_evaluation_dry.get('backbone')
+                or evaluation_dry.get('inputs') != qa_evaluation_dry.get('inputs')):
+            raise ValueError('Stage 1/QA estimates used different adapters or inputs')
     return {'measured_probe_wall_seconds': probe_wall, 'jobs': {
         name: {'expected_hours': seconds / 3600, 'estimated_cost_usd': seconds / 3600 * 2.09,
                'guard_hours': seconds / 3600 * 1.5, 'guard_cost_usd': seconds / 3600 * 1.5 * 2.09}
@@ -48,10 +59,12 @@ def main():
     p.add_argument('--probe-report', type=Path, required=True)
     p.add_argument('--smoke-report', type=Path)
     p.add_argument('--evaluation-dry-report', type=Path)
+    p.add_argument('--qa-evaluation-dry-report', type=Path)
     p.add_argument('--output', type=Path, required=True)
     args = p.parse_args()
     load = lambda path: json.loads(path.read_text()) if path else None
-    result = plan(load(args.probe_report), load(args.smoke_report), load(args.evaluation_dry_report))
+    result = plan(load(args.probe_report), load(args.smoke_report), load(args.evaluation_dry_report),
+                  load(args.qa_evaluation_dry_report))
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2, sort_keys=True) + '\n')
     print(json.dumps(result, indent=2))
