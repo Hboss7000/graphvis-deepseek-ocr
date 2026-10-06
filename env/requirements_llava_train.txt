@@ -1,0 +1,9 @@
+# Proposed additions; install only after Henrique approves.
+torch==2.8.0+cu128
+torchvision==0.23.0+cu128
+transformers==5.16.1
+accelerate==1.15.0
+peft==0.21.2
+mlflow==2.22.2
+matplotlib==3.10.8
+pytest==8.4.2

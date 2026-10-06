@@ -1,0 +1,9 @@
+# Laptop-only proposed test environment; explicit approval required to install.
+# Install torch/torchvision first from https://download.pytorch.org/whl/cpu.
+torch==2.8.0+cpu
+torchvision==0.23.0+cpu
+transformers==5.16.1
+peft==0.21.2
+accelerate==1.15.0
+pytest==8.4.2
+pillow==12.3.0
