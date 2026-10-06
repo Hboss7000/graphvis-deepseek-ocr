@@ -107,6 +107,13 @@ def attach_lora(model, r=128, alpha=256, dropout=.05):
 
 def projector(model):
     base = model.get_base_model() if hasattr(model, 'get_base_model') else model
+    if base.config.model_type == 'qwen3_vl':
+        import torch
+        visual = base.model.visual
+        if len(visual.deepstack_merger_list) != 3:
+            raise ValueError('Expected the approved main plus three DeepStack mergers')
+        return torch.nn.ModuleDict({'main': visual.merger,
+            **{f'deepstack_{i}': layer for i, layer in enumerate(visual.deepstack_merger_list)}})
     return base.model.multi_modal_projector
 
 

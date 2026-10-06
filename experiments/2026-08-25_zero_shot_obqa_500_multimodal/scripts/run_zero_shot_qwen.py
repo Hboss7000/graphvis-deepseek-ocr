@@ -210,6 +210,8 @@ def load_processor(AutoProcessor, args: argparse.Namespace):
     }
     if args.revision:
         load_kwargs["revision"] = args.revision
+    if getattr(args, 'local_files_only', False):
+        load_kwargs['local_files_only'] = True
     processor = AutoProcessor.from_pretrained(args.model_id, **load_kwargs)
     budget_api = "min_pixels/max_pixels"
     if processor_pixel_bounds(processor) != (args.min_pixels, args.max_pixels):
