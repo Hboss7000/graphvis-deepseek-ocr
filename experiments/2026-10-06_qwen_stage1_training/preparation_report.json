@@ -1,0 +1,54 @@
+{
+  "cpu_checks": {
+    "command": "OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 MLFLOW_DISABLE_TELEMETRY=true MLFLOW_DISABLE_AGENT_HINT=true .venv_llava_cpu/bin/python -m pytest -q tests/llava_stage1_training_cpu_checks.py tests/test_llava_stage1_training_data.py tests/test_llava_stage1_diagnostics.py tests/test_llava_runners.py tests/test_llava_stage1_execution.py tests/test_stage1_storage.py tests/qwen_stage1_training_cpu_checks.py tests/test_qwen_stage1_execution.py --basetemp outputs/shared_stage1_cpu_checks",
+    "evidence": [
+      "native processor on all 1300 images and exact token expansion on 7800 task records",
+      "answer-only plus end-token labels; zero truncation and padding masked",
+      "real tiny Qwen vision, main plus three DeepStack bridges gradients, frozen encoder",
+      "shared optimizer/scheduler/RNG exact resume and readable resumed MLflow run",
+      "verified adapter/all-bridge reload, identical image and text-only greedy IDs",
+      "real frozen zero-shot Qwen comparison: nine Stage 1 tasks, QA 500 x 4",
+      "Qwen worker shell dispatch and offline/cache/interpreter argument checks without GPU/pod"
+    ],
+    "follow_up_comparison_checks_passed": 17,
+    "last_combined_run_seconds": 11.68,
+    "log": "outputs/shared_stage1_cpu_checks.log",
+    "not_established": [
+      "full 8B CUDA/bf16 behavior",
+      "GPU VRAM and timing",
+      "actual pod disk and checkpoint size",
+      "live cost quote"
+    ],
+    "passed": 66
+  },
+  "cpu_environment": {
+    "accelerate": "1.15.0",
+    "mlflow": "3.16.1",
+    "path": ".venv_llava_cpu",
+    "peft": "0.21.2",
+    "pip_check": "No broken requirements found.",
+    "python": "3.12.7",
+    "torch": "2.8.0+cpu",
+    "transformers": "5.16.1"
+  },
+  "data_manifest_sha256": "643dfe4d0eb248bd7e8050b9d77e06c6fdd155d996c279df3c6e0eb40e932574",
+  "instructions": "scripts/QWEN_STAGE1_TRAINING.md",
+  "model_id": "Qwen/Qwen3-VL-8B-Instruct",
+  "model_revision": "0c351dd01ed87e9c1b53cbc748cba10e6187ff3b",
+  "model_weights_downloaded": false,
+  "pod_environment_blocker": "PyPI-only approval cannot satisfy exact +cu128 distribution pins; no source exception granted and no pod install attempted.",
+  "pod_steps_executed": false,
+  "processor_assets_manifest_sha256": "480e7c3e4a28b8c0023e4b05ad910473ae3dc05e4641072eaf06944b0db8028b",
+  "shell_validation": {
+    "bash_blocks": 43,
+    "shell_scripts": 3
+  },
+  "source_commits": {
+    "llava_four_priorities": "15974efa6f01c84342a3eb575a20fa59f1cbde48",
+    "qwen_evaluation": "ab116ee3c4a2499981fa1f39be7c90bfdce2006e",
+    "qwen_native_audit": "ea37876e4124237c8cf60c3a1a2ebc1f93b356e4",
+    "qwen_shared_trainer": "58b6e5f678b730d042074fa25b4375afc4d80a8c"
+  },
+  "token_diagnostics_sha256": "b851363c56a4da3121918aced031d7d5133169aa4261a16ca4cf81e32e3601e3",
+  "trainable_scope_sha256": "6c582dd638562d3eb7e2ae7bb41f7a4331d76ef112e88dccb4adcab2902255bb"
+}

@@ -16,7 +16,7 @@ import run_zero_shot_qwen as qa
 import run_stage1_qwen as stage
 
 @pytest.mark.parametrize('phase,count,qa_count',[('dry',9,8),('full',900,500)])
-def test_qwen_stage_first_qa_second_pixel_pins_native_generation(phase,count,qa_count):
+def test_qwen_stage_first_qa_second_pixel_pins_native_generation(phase,count,qa_count,monkeypatch):
     commands=jobs(phase,Path('/adapter'),Path('/data'),Path('/dry'),Path('/out'),'qwen')
     assert [n for n,_ in commands]==['stage1','qa_image','qa_text_noref','qa_text','qa_kg_text']
     assert [n for n,_ in jobs(phase,Path('/a'),Path('/d'),Path('/s'),Path('/o'),'qwen','stage1')]==['stage1']
@@ -29,6 +29,9 @@ def test_qwen_stage_first_qa_second_pixel_pins_native_generation(phase,count,qa_
         assert val('--expected-count')==str(count if name=='stage1' else qa_count)
         assert val('--max-new-tokens')==('1024' if name=='stage1' else '64')
         assert 'qwen.py' in cmd[1]
+        monkeypatch.setattr(sys,'argv',cmd[1:])
+        parsed = stage.parse_args() if name == 'stage1' else qa.parse_args()
+        assert parsed.adapter == Path('/adapter') and parsed.revision == DEFAULT_REVISION
         if name=='stage1':assert val('--extractor')=='span_extended'
 
 
@@ -103,3 +106,25 @@ def test_stage_and_qa_measured_costs_are_separate_and_same_adapter():
     assert result['jobs']['eval_qa']['guard_hours']==200*1.5/3600
     with pytest.raises(ValueError,match='different adapters'):
         plan(probe,evaluation_dry=stage_report,qa_evaluation_dry={**qa_report,'adapter_sha256':'b'*64})
+
+
+def test_pod_worker_dispatch_uses_qwen_shared_data_offline_and_cache_cli(tmp_path):
+    import os
+    import subprocess
+    project=tmp_path/'bachelorArbeit';project.mkdir()
+    py=tmp_path/'venvs/venv_train/bin/python';py.parent.mkdir(parents=True)
+    # Stand-in records calls; no GPU, model load, package install or network.
+    py.write_text('#!/usr/bin/env bash\nset -eu\nprintf "%s\\n" "$*" >> "$WORKSPACE/calls.txt"\nif [[ "$1" == -c ]]; then echo 2; fi\n')
+    py.chmod(0o755)
+    worker=ROOT/'scripts/llava_stage1_pod_job.sh'
+    env={**os.environ,'WORKSPACE':str(tmp_path),'TMUX':'cpu-fixture','BACKBONE':'qwen','RUN_TAG':'qwen_fixture','MAX_SECONDS':'5'}
+    for job in ['probe','smoke-first','smoke-resume','train','eval-dry']:
+        subprocess.run(['bash',str(worker),job],env={**env,'ADAPTER_PATH':str(tmp_path/'adapter'),'EVAL_SCOPE':'stage1'},check=True,capture_output=True,text=True)
+    calls=(tmp_path/'calls.txt').read_text()
+    assert 'stage1_weight_cache.py --backbone qwen --cache' in calls
+    assert '--hf-home' not in calls
+    assert 'probe_llava_stage1_batch.py --backbone qwen' in calls
+    assert 'train_qwen_stage1.py' in calls and 'train_llava_stage1.py' not in calls
+    assert '--data-dir '+str(project/'outputs/llava_stage1_training_2026-10-06') in calls
+    assert '--token-diagnostics '+str(project/'outputs/qwen_stage1_training_2026-10-06/token_diagnostics.json') in calls
+    assert '--scope stage1 --phase dry' in calls

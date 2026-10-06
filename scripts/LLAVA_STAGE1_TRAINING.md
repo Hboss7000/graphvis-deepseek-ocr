@@ -4,6 +4,12 @@ The requested scope is Stage 1 only. Stop point 1 is complete. The trainer, smok
 mode, evaluation wiring and commands are prepared; no real-model GPU job has
 been run. Henrique pushes the commits. Existing uncommitted work is excluded.
 
+Qwen transfer training now reuses this trainer, storage, logging and evaluation
+code. See [QWEN_STAGE1_TRAINING.md](QWEN_STAGE1_TRAINING.md) for its separately
+audited native template, approved four merger bridges and Stage 1-first/optional
+QA commands. The combined CPU regression suite passed 66 checks; the original
+55-check LLaVA suite remains included. No pod step was executed.
+
 ## Environment proposal (approval required before installation)
 
 Verified in `env/freeze_venv_qwen.txt`: torch 2.8.0+cu128, torchvision

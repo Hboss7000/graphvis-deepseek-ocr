@@ -79,8 +79,10 @@ class TrainingLogger:
             self.run_id = state['run_id']
             self.client.get_run(self.run_id)
         else:
-            experiment = self.client.get_experiment_by_name('llava-stage1')
-            experiment_id = experiment.experiment_id if experiment else self.client.create_experiment('llava-stage1')
+            experiment_name = ('qwen-stage1' if params.get('model_id') == 'Qwen/Qwen3-VL-8B-Instruct'
+                               else 'llava-stage1')
+            experiment = self.client.get_experiment_by_name(experiment_name)
+            experiment_id = experiment.experiment_id if experiment else self.client.create_experiment(experiment_name)
             self.run_id = self.client.create_run(experiment_id,
                 tags={'mlflow.runName': self.output_dir.name}).info.run_id
             state_path.write_text(json.dumps({'tracking_uri': tracking_uri, 'run_id': self.run_id}, indent=2) + '\n')

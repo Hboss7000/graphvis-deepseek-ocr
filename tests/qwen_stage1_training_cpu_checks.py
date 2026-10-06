@@ -137,6 +137,7 @@ def test_shared_loop_resume_logger_and_adapter_reload(setup,examples,tmp_path,mo
     final=train_steps(resumed,opt,sched,rows*2,rows,collate,directory,contract,log,
                       torch.device('cpu'),torch.float32,resume=first['checkpoint'])
     assert final['complete'] and log.readable() and log.run_id==run_id
+    assert log.client.get_experiment(log.client.get_run(run_id).info.experiment_id).name == 'qwen-stage1'
     log.close()
     for n,p in resumed.named_parameters():
         if p.requires_grad:torch.testing.assert_close(p,expected[n],rtol=0,atol=0)
@@ -156,4 +157,10 @@ def test_shared_loop_resume_logger_and_adapter_reload(setup,examples,tmp_path,mo
     with torch.no_grad():
         torch.testing.assert_close(loaded.generate(**probe,max_new_tokens=2,do_sample=False,use_cache=True),
             resumed.generate(**probe,max_new_tokens=2,do_sample=False,use_cache=True),rtol=0,atol=0)
+        from qwen_stage1_training import format_qwen_prompt
+        text_probe=prepare_inputs(processor,format_qwen_prompt(processor,'Question? Choices A-D.','text'),
+                                  None,SimpleNamespace(min_pixels=256,max_pixels=1024))
+        assert 'pixel_values' not in text_probe
+        torch.testing.assert_close(loaded.generate(**text_probe,max_new_tokens=2,do_sample=False,use_cache=True),
+            resumed.generate(**text_probe,max_new_tokens=2,do_sample=False,use_cache=True),rtol=0,atol=0)
     assert len(provenance['sha256'])==64

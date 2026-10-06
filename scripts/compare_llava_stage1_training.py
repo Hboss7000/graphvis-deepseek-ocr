@@ -66,13 +66,21 @@ def compare_stage(directories, source, metadata, backbone='llava'):
         verify_config(config, source, template, prefix, tuned, 1024, backbone)
         if config['graph_metadata']['sha256'] != file_sha(metadata):
             raise ValueError('Comparison metadata differs')
+        if backbone == 'qwen' and (config.get('extractor') != 'span_extended'
+                or config.get('answer_format', {}).get('mode') != 'none'):
+            raise ValueError('Qwen comparison requires the unchanged extractor/answer format')
         metrics, _ = score_files(SimpleNamespace(input_jsonl=source, graph_metadata=metadata,
             predictions_dir=directory, model_name=backbone, task_set='extended', extractor='span_extended'))
         if metrics['input_record_count'] != 900 or any(n != 100 for n in metrics['task_record_counts'].values()):
             raise ValueError('Expected all 100 graphs x nine tasks in comparison')
         results[name] = {'status': 'complete', 'path': str(directory), 'metrics': metrics,
                          'adapter_sha256': config.get('adapter', {}).get('sha256'),
+                         'prompt_bodies_sha256': config.get('prompt_bodies_sha256'),
                          'run_config_sha256': file_sha(directory / 'run_config.json')}
+    if backbone == 'qwen':
+        hashes = {r['prompt_bodies_sha256'] for r in results.values() if r['status'] == 'complete'}
+        if None in hashes or len(hashes) > 1:
+            raise ValueError('Qwen zero-shot/tuned prompt bodies differ')
     tuned_hashes = {value['adapter_sha256'] for name, value in results.items()
                    if name.startswith('tuned') and value['status'] == 'complete'}
     if len(tuned_hashes) > 1:
@@ -91,6 +99,9 @@ def compare_qa(directory, source, tuned, backbone='llava'):
     for condition in ('image', 'text_noref', 'text', 'kg_text'):
         folder = directory / f'qa_{condition}'
         config = json.loads((folder / 'run_config.json').read_text())
+        if backbone == 'qwen' and config['graph_metadata']['sha256'] != file_sha(
+                source.parent / 'graph_metadata_0_500.jsonl'):
+            raise ValueError('QA comparison metadata differs')
         verify_config(config, source, ('qwen-native-no-system' if backbone == 'qwen' else
             ('llava_v1' if tuned else 'hf-chat')), 'none', tuned, 64, backbone)
         if tuned:
@@ -111,6 +122,7 @@ def compare_qa(directory, source, tuned, backbone='llava'):
         metrics[condition] = {'n': 500, 'accuracy': correct / 500,
             'parse_failure_fraction': sum(p == 'FAILED' for p in parsed) / 500,
             'ceiling_fraction': sum(r['hit_token_ceiling'] for r in rows) / 500,
+            'prompt_bodies_sha256': config.get('prompt_bodies_sha256'),
             'run_config_sha256': file_sha(folder / 'run_config.json')}
     if len(adapter_hashes) > 1:
         raise ValueError('Tuned QA conditions use different adapters')
@@ -149,6 +161,11 @@ def main():
                   'Paper CSQA exact-match scores are directional references, not directly comparable headline metrics.',
                   'Unavailable arms are explicit missing results, never zeros.']}
     report['backbone'] = args.backbone
+    if args.backbone == 'qwen' and all(arm['status'] == 'complete' for arm in report['qa'].values()):
+        for condition in ('image', 'text_noref', 'text', 'kg_text'):
+            hashes = {arm['metrics'][condition]['prompt_bodies_sha256'] for arm in report['qa'].values()}
+            if None in hashes or len(hashes) != 1:
+                raise ValueError('Qwen zero-shot/tuned QA prompt bodies differ')
     adapters = {arm['adapter_sha256'] for arm in results.values()
                 if arm['status'] == 'complete' and arm.get('adapter_sha256')}
     if report['qa']['tuned'].get('adapter_sha256'):
