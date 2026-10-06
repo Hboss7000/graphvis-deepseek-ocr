@@ -5,11 +5,15 @@ PROMPT_TEMPLATES = ('hf-chat', 'llava_v1')
 
 
 def format_stage1_prompt(processor, body, prompt_template='hf-chat'):
+    return format_llava_prompt(processor, body, 'image', prompt_template)
+
+
+def format_llava_prompt(processor, body, condition, prompt_template='hf-chat'):
     if prompt_template == 'hf-chat':
-        return format_prompt(processor, body, 'image')
+        return format_prompt(processor, body, condition)
     if prompt_template != 'llava_v1':
         raise ValueError(f'Unknown prompt template: {prompt_template}')
-    build_messages(body, 'image')  # Validate exactly one leading image placeholder.
+    build_messages(body, condition)  # Validate the shared image/text body.
     # Source: https://github.com/yihedeng9/GraphVis/blob/main/llava/conversation.py
     # conv_llava_v1 and Conversation.get_prompt(), SeparatorStyle.TWO:
     # system + sep=" " + "USER: " + message + sep + "ASSISTANT:" (empty reply).

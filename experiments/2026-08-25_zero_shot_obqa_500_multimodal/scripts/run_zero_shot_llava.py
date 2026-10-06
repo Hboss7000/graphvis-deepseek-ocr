@@ -49,10 +49,17 @@ from llava_common import (  # noqa: E402
 MAX_NEW_TOKENS = 64
 
 
+def format_qa_prompt(processor, body, condition, args):
+    from llava_stage1_prompt import format_llava_prompt
+    return format_llava_prompt(processor, body, condition, getattr(args, 'prompt_template', 'hf-chat'))
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model-id", default=DEFAULT_MODEL_ID)
     parser.add_argument("--revision", default=DEFAULT_REVISION)
+    parser.add_argument("--adapter", type=Path, help="Verified adapter+projector checkpoint")
+    parser.add_argument("--prompt-template", choices=('hf-chat', 'llava_v1'), default='hf-chat')
     parser.add_argument("--input-jsonl", type=Path, required=True)
     parser.add_argument("--graph-metadata", type=Path, required=True)
     parser.add_argument("--image-root", type=Path, required=True)
@@ -130,6 +137,12 @@ def write_run_config(args, records, metadata_by_idx, transformers_version,
         "vision_tokens_per_item": "Count of expanded image token IDs in processor input_ids",
     }
     config = enrich_config(config)
+    if getattr(args, 'adapter', None):
+        from llava_adapter import adapter_provenance
+        config['adapter'] = adapter_provenance(args.adapter, args.model_id, args.revision)
+    if getattr(args, 'prompt_template', 'hf-chat') != 'hf-chat':
+        config['prompt_template'] = args.prompt_template
+        config['prompt'] = 'Unchanged shared OBQA body through GraphVis conv_llava_v1 (TWO)'
     path = args.output_jsonl.parent / "run_config.json"
     if path.exists():
         existing = json.loads(path.read_text(encoding="utf-8"))
@@ -160,6 +173,9 @@ def main() -> None:
     processor = LlavaNextProcessor.from_pretrained(args.model_id, revision=args.revision)
     model_config = LlavaNextConfig.from_pretrained(args.model_id, revision=args.revision)
     processor_expansion = configure_processor(processor, model_config)
+    if args.adapter:
+        from llava_adapter import adapter_provenance
+        adapter_provenance(args.adapter, args.model_id, args.revision)
     first = min(records, key=lambda row: int(row["statement_idx"]))
     first_idx = int(first["statement_idx"])
     kg_block = format_kg_block(metadata_by_idx[first_idx])
@@ -167,7 +183,7 @@ def main() -> None:
         first["prompt"], condition,
         kg_block=kg_block if condition == "kg_text" else None,
     ) for condition in CONDITIONS}
-    formatted = {condition: format_prompt(processor, body, condition)
+    formatted = {condition: format_qa_prompt(processor, body, condition, args)
                  for condition, body in bodies.items()}
     for condition in CONDITIONS:
         print(f"SHARED BODY: {condition}\n{bodies[condition]}", flush=True)
@@ -207,6 +223,9 @@ def main() -> None:
         torch_dtype=torch.bfloat16,
         device_map="auto",
     ).eval()
+    if args.adapter:
+        from llava_adapter import load_adapter
+        model, _ = load_adapter(model, args.adapter, args.model_id, args.revision)
     loading_seconds = perf_counter() - load_started
     model.generation_config.do_sample = False
     model.generation_config.num_beams = 1
@@ -232,10 +251,11 @@ def main() -> None:
             if statement_idx in done:
                 continue
             begin_item()
+            item_started = perf_counter()
             per_item_kg = (format_kg_block(metadata_by_idx[statement_idx])
                            if args.condition == "kg_text" else None)
             body = render_prompt(record["prompt"], args.condition, kg_block=per_item_kg)
-            prompt_text = format_prompt(processor, body, args.condition)
+            prompt_text = format_qa_prompt(processor, body, args.condition, args)
             image = None
             if args.condition == "image":
                 with Image.open(args.image_root / record["image"]) as opened:
@@ -264,6 +284,8 @@ def main() -> None:
                 "timestamp_utc": datetime.now(timezone.utc).isoformat(),
             }
             finish_item(result)
+            if args.adapter or args.prompt_template != 'hf-chat':
+                result['item_elapsed_seconds'] = perf_counter() - item_started
             output.write(json.dumps(result, ensure_ascii=False) + "\n")
             output.flush()
             done.add(statement_idx)

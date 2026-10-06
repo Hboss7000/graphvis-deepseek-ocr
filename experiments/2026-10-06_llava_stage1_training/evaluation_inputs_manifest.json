@@ -1,0 +1,15 @@
+{
+  "dry_files_sha256": {
+    "qa_dry.jsonl": "d7bdfde27b7ce93e7d9f35765e9b16bf8590c8eb5cb2031857287f7a6060b568",
+    "stage1_dry.jsonl": "35990e7cabcb3302b43dcbc3cb020fefdd5693ea57b60e9b5074ca18445f34d5"
+  },
+  "qa_dry_count": 8,
+  "qa_full_count": 500,
+  "source_files_sha256": {
+    "test/graph_metadata_0_500.jsonl": "a1079b6f2b181806ea9aa1c989d155f65e0d9596d172d5b116130439ab75af45",
+    "test/stage1_subset100.jsonl": "9dc5ac28d2cf7d596bfa4d45837b31bd6294428e8262c7784724186ccc8cf9c6",
+    "test/stage2_obqa_0_500.jsonl": "1e1a360a274e0735251bb87fbeafc9ad37dd6248cca64e6af25d560b7db2fa3a"
+  },
+  "stage1_dry_count": 9,
+  "stage1_full_count": 900
+}

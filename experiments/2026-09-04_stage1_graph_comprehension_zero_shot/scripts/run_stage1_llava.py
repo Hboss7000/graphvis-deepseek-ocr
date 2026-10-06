@@ -62,6 +62,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model-id", default=DEFAULT_MODEL_ID)
     parser.add_argument("--revision", default=DEFAULT_REVISION)
+    parser.add_argument("--adapter", type=Path, help="Verified checkpoint containing adapter and projector weights")
     parser.add_argument("--input-jsonl", type=Path, required=True)
     parser.add_argument("--graph-metadata", type=Path, required=True)
     parser.add_argument("--image-root", type=Path, required=True)
@@ -179,6 +180,10 @@ def main() -> None:
     processor = LlavaNextProcessor.from_pretrained(args.model_id, revision=args.revision)
     model_config = LlavaNextConfig.from_pretrained(args.model_id, revision=args.revision)
     processor_expansion = configure_processor(processor, model_config)
+    adapter_info = None
+    if args.adapter:
+        from llava_adapter import adapter_provenance
+        adapter_info = adapter_provenance(args.adapter, args.model_id, args.revision)
     first_by_task = {}
     for record in records:
         first_by_task.setdefault(record["task_type"], record)
@@ -228,6 +233,9 @@ def main() -> None:
         torch_dtype=torch.bfloat16,
         device_map="auto",
     ).eval()
+    if args.adapter:
+        from llava_adapter import load_adapter
+        model, adapter_info = load_adapter(model, args.adapter, args.model_id, args.revision)
     loading_seconds = perf_counter() - load_started
     model.generation_config.do_sample = False
     model.generation_config.num_beams = 1
@@ -259,6 +267,8 @@ def main() -> None:
         "vision_tokens_per_item": "Count of expanded image token IDs in processor input_ids",
     }
     run_config.update(config_settings(args, run_config["prompt_bodies_sha256"]))
+    if adapter_info is not None:
+        run_config['adapter'] = adapter_info
     if args.prompt_template == "llava_v1":
         run_config["prompt"] = "Unchanged shared Stage 1 body through GraphVis conv_llava_v1 (TWO)"
     run_config = enrich_config(run_config)
