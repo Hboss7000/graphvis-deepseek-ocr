@@ -1,0 +1,148 @@
+{
+  "training": {
+    "answer_characters": {
+      "mean": 161.89263888888888,
+      "n": 7200,
+      "percentiles": {
+        "0": 31.0,
+        "100": 1003.0,
+        "25": 32.0,
+        "50": 54.5,
+        "75": 178.0,
+        "90": 558.1000000000004,
+        "95": 798.0,
+        "99": 885.0
+      }
+    },
+    "example_prompts": {
+      "edge_number": {
+        "answer": "There are 26 edges in the graph.",
+        "image": "train/images/q00007_clean.png",
+        "prompt": "What is the total number of edges in the graph?",
+        "source": "graphvis_stage1_clean_union_of_four",
+        "split": "train",
+        "statement_idx": 7,
+        "task_type": "edge_number"
+      },
+      "highest_node_degree": {
+        "answer": "One node with the highest degree is \"waste\" with a degree of 9.",
+        "image": "train/images/q00007_clean.png",
+        "prompt": "Identify one of the node that has the most connections in the graph and specify its degree.",
+        "source": "graphvis_stage1_clean_union_of_four",
+        "split": "train",
+        "statement_idx": 7,
+        "task_type": "highest_node_degree"
+      },
+      "node_degree": {
+        "answer": "The degree of the node \"waste\" is 9.",
+        "image": "train/images/q00007_clean.png",
+        "prompt": "What is the degree of the node labeled \"waste\"?",
+        "source": "graphvis_stage1_clean_union_of_four",
+        "split": "train",
+        "statement_idx": 7,
+        "target_node": "waste",
+        "task_type": "node_degree"
+      },
+      "node_description": {
+        "answer": "The image depicts the following nodes: gain, down, being, plant, plants, waste, like, matter, generic, product, run, smoke, bacteria, mushrooms, robot, mushroom, robots.",
+        "image": "train/images/q00007_clean.png",
+        "prompt": "Can you name all the nodes shown in the graph image?",
+        "source": "graphvis_stage1_clean_union_of_four",
+        "split": "train",
+        "statement_idx": 7,
+        "task_type": "node_description"
+      },
+      "node_number": {
+        "answer": "There are 17 nodes in the graph.",
+        "image": "train/images/q00007_clean.png",
+        "prompt": "What is the total number of nodes in the graph?",
+        "source": "graphvis_stage1_clean_union_of_four",
+        "split": "train",
+        "statement_idx": 7,
+        "task_type": "node_number"
+      },
+      "triple_listing": {
+        "answer": "The triples in the graph are listed as: (gain, antonym, waste), (down, related to, plant), (being, related to, generic), (plant, related to, being), (plant, related to, like), (plant, related to, matter), (plant, related to, generic), (plant, related to, product), (plant, related to, smoke), (plants, not capable of, run), (plants, related to, plant), (waste, has subevent, run), (waste, related to, down), (waste, related to, being), (waste, related to, like), (waste, related to, matter), (waste, related to, generic), (waste, related to, product), (generic, related to, product), (run, related to, like), (smoke, related to, waste), (smoke, related to, like), (smoke, related to, product), (mushrooms, related to, mushroom), (mushroom, related to, gain), (robots, related to, robot).",
+        "image": "train/images/q00007_clean.png",
+        "prompt": "Provide all the triples in the graph.",
+        "source": "graphvis_stage1_clean_union_of_four",
+        "split": "train",
+        "statement_idx": 7,
+        "task_type": "triple_listing"
+      }
+    }
+  },
+  "validation": {
+    "answer_characters": {
+      "mean": 160.18166666666667,
+      "n": 600,
+      "percentiles": {
+        "0": 31.0,
+        "100": 1026.0,
+        "25": 32.0,
+        "50": 53.0,
+        "75": 175.5,
+        "90": 529.0,
+        "95": 817.0,
+        "99": 887.03
+      }
+    },
+    "example_prompts": {
+      "edge_number": {
+        "answer": "There are 10 edges in the graph.",
+        "image": "train/images/q00322_clean.png",
+        "prompt": "What is the total number of edges in the graph?",
+        "source": "graphvis_stage1_clean_union_of_four",
+        "split": "train",
+        "statement_idx": 322,
+        "task_type": "edge_number"
+      },
+      "highest_node_degree": {
+        "answer": "One node with the highest degree is \"car\" with a degree of 3.",
+        "image": "train/images/q00322_clean.png",
+        "prompt": "Identify one of the node that has the most connections in the graph and specify its degree.",
+        "source": "graphvis_stage1_clean_union_of_four",
+        "split": "train",
+        "statement_idx": 322,
+        "task_type": "highest_node_degree"
+      },
+      "node_degree": {
+        "answer": "The degree of the node \"added\" is 1.",
+        "image": "train/images/q00322_clean.png",
+        "prompt": "What is the degree of the node labeled \"added\"?",
+        "source": "graphvis_stage1_clean_union_of_four",
+        "split": "train",
+        "statement_idx": 322,
+        "target_node": "added",
+        "task_type": "node_degree"
+      },
+      "node_description": {
+        "answer": "The image depicts the following nodes: add, water, car, fluid, heat, gasoline, need, engine, radiator, needs, added, wiper, wiper fluid.",
+        "image": "train/images/q00322_clean.png",
+        "prompt": "Can you name all the nodes shown in the graph image?",
+        "source": "graphvis_stage1_clean_union_of_four",
+        "split": "train",
+        "statement_idx": 322,
+        "task_type": "node_description"
+      },
+      "node_number": {
+        "answer": "There are 13 nodes in the graph.",
+        "image": "train/images/q00322_clean.png",
+        "prompt": "What is the total number of nodes in the graph?",
+        "source": "graphvis_stage1_clean_union_of_four",
+        "split": "train",
+        "statement_idx": 322,
+        "task_type": "node_number"
+      },
+      "triple_listing": {
+        "answer": "The triples in the graph are listed as: (water, is a, fluid), (water, related to, need), (car, related to, gasoline), (heat, related to, water), (heat, related to, radiator), (gasoline, is a, fluid), (engine, part of, car), (radiator, part of, car), (needs, related to, need), (added, related to, add).",
+        "image": "train/images/q00322_clean.png",
+        "prompt": "Provide all the triples in the graph.",
+        "source": "graphvis_stage1_clean_union_of_four",
+        "split": "train",
+        "statement_idx": 322,
+        "task_type": "triple_listing"
+      }
+    }
+  }
+}
