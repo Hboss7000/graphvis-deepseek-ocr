@@ -135,3 +135,132 @@ def test_finite_real_vision_forward_backward_and_exact_resume(setup, examples, t
         handle.write(b'corruption')
     with pytest.raises(ValueError, match='hash mismatch'):
         load_checkpoint(resumed, opt2, sched2, checkpoint, run_config)
+
+
+def test_real_training_loop_resume_adapter_inference_and_file_store(setup, examples, tmp_path, monkeypatch):
+    import csv
+    import socket
+    from train_llava_stage1 import train_steps, optimizer_and_scheduler
+    from llava_training_logging import TrainingLogger
+    from llava_adapter import load_adapter
+
+    def deny_network(*args, **kwargs):
+        raise AssertionError('Training/MLflow must not access the network')
+    monkeypatch.setattr(socket.socket, 'connect', deny_network)
+    processor, config = setup
+    root, records = examples
+    collator = Stage1Collator(processor, root)
+    contract = {'model_id': DEFAULT_MODEL_ID, 'model_revision': DEFAULT_REVISION,
+                'mode': 'full', 'optimizer_steps': 2, 'global_batch_size': 2,
+                'per_device_batch_size': 1, 'test': 'random tiny model, float32 CPU'}
+    store = (tmp_path / 'mlruns').as_uri()
+    reference, _, _ = new_model(config)
+    optimizer, scheduler = optimizer_and_scheduler(reference, 2e-5, 2e-5, 2)
+    reference_dir = tmp_path / 'reference'
+    log = TrainingLogger(reference_dir, contract, store)
+    train_steps(reference, optimizer, scheduler, records * 2, records, collator,
+                reference_dir, contract, log, torch.device('cpu'), torch.float32)
+    assert log.readable()
+    log.close()
+    expected = {name: p.detach().clone() for name, p in reference.named_parameters() if p.requires_grad}
+
+    model, _, _ = new_model(config)
+    optimizer, scheduler = optimizer_and_scheduler(model, 2e-5, 2e-5, 2)
+    directory = tmp_path / 'resumed'
+    log = TrainingLogger(directory, contract, store)
+    first = train_steps(model, optimizer, scheduler, records * 2, records, collator,
+                        directory, contract, log, torch.device('cpu'), torch.float32, stop_after_step=1)
+    run_id = log.run_id
+    log.close('KILLED')
+    checkpoint = Path(first['checkpoint'])
+    resumed, _, _ = new_model(config)
+    optimizer, scheduler = optimizer_and_scheduler(resumed, 2e-5, 2e-5, 2)
+    log = TrainingLogger(directory, contract, store, resume_step=1)
+    final = train_steps(resumed, optimizer, scheduler, records * 2, records, collator,
+                        directory, contract, log, torch.device('cpu'), torch.float32, resume=checkpoint)
+    assert final['complete'] and log.run_id == run_id and log.readable()
+    log.close()
+    for name, value in resumed.named_parameters():
+        if value.requires_grad:
+            torch.testing.assert_close(value, expected[name], rtol=0, atol=0)
+    with (directory / 'metrics.csv').open() as handle:
+        logged = list(csv.DictReader(handle))
+    assert [int(r['step']) for r in logged if r['event'] == 'train'] == [1, 2]
+    assert any(r['validation_loss'] for r in logged)
+
+    # Frozen random backbone must match exactly; the adapter loader supplies only trained weights.
+    torch.manual_seed(13)
+    bare = LlavaNextForConditionalGeneration(copy.deepcopy(config))
+    inference, provenance = load_adapter(bare, final['checkpoint'], DEFAULT_MODEL_ID, DEFAULT_REVISION)
+    batch = collator(records)
+    resumed.eval()
+    with torch.no_grad():
+        expected_logits = resumed(**batch).logits
+        actual_logits = inference(**batch).logits
+    torch.testing.assert_close(actual_logits, expected_logits, rtol=0, atol=0)
+    from llava_common import prepare_inputs
+    prompt, _ = training_text(processor, records[0])
+    with Image.open(root / records[0]['image']) as image:
+        probe = prepare_inputs(processor, prompt, image.convert('RGB'))
+    with torch.inference_mode():
+        expected_ids = resumed.generate(**probe, max_new_tokens=2, do_sample=False, num_beams=1, use_cache=True)
+        actual_ids = inference.generate(**probe, max_new_tokens=2, do_sample=False, num_beams=1, use_cache=True)
+    torch.testing.assert_close(actual_ids, expected_ids, rtol=0, atol=0)
+    assert len(provenance['sha256']) == 64
+    with pytest.raises(ValueError, match='revision differs'):
+        load_adapter(bare, final['checkpoint'], DEFAULT_MODEL_ID, '0' * 40)
+
+    from plot_training import read_csv, read_mlflow, plot
+    csv_series = read_csv(directory / 'metrics.csv')
+    assert read_mlflow(tmp_path / 'mlruns', run_id) == csv_series
+    plot(csv_series, tmp_path / 'plots')
+    for name in ('loss.png', 'lr.png'):
+        with Image.open(tmp_path / 'plots' / name) as figure:
+            assert figure.size == (1920, 1080)
+
+
+def test_mlflow_failure_keeps_csv_and_training_independent(tmp_path, monkeypatch):
+    import csv
+    from llava_training_logging import TrainingLogger
+    logger = TrainingLogger(tmp_path / 'out', {'lr': 2e-5}, (tmp_path / 'mlruns').as_uri())
+    def broken(*args, **kwargs):
+        raise RuntimeError('Deliberate MLflow failure')
+    monkeypatch.setattr(logger.client, 'log_metric', broken)
+    with pytest.warns(UserWarning, match='CSV continues'):
+        logger.log('train', 1, {'loss': 1.25})
+    logger.close()
+    with logger.csv_path.open() as handle:
+        assert list(csv.DictReader(handle))[0]['loss'] == '1.25'
+
+
+def test_validation_failure_keeps_update_and_replays_on_resume(setup, examples, tmp_path, monkeypatch):
+    import train_llava_stage1 as trainer
+    from llava_training_logging import TrainingLogger
+    processor, config = setup
+    root, records = examples
+    collator = Stage1Collator(processor, root)
+    contract = {'mode': 'full', 'optimizer_steps': 2, 'global_batch_size': 2,
+                'per_device_batch_size': 1}
+    model, _, _ = new_model(config)
+    optimizer, scheduler = trainer.optimizer_and_scheduler(model, 2e-5, 2e-5, 2)
+    output = tmp_path / 'training'
+    logger = TrainingLogger(output, contract)
+    original_validation = trainer.validation
+    def fail_validation(*args, **kwargs):
+        raise RuntimeError('Simulated validation crash')
+    monkeypatch.setattr(trainer, 'validation', fail_validation)
+    with pytest.raises(RuntimeError, match='validation crash'):
+        trainer.train_steps(model, optimizer, scheduler, records * 2, records, collator,
+                            output, contract, logger, torch.device('cpu'), torch.float32)
+    logger.close('FAILED')
+    checkpoint = output / 'checkpoint-000002'
+    assert (checkpoint / 'checkpoint_manifest.json').exists()
+    monkeypatch.setattr(trainer, 'validation', original_validation)
+    resumed, _, _ = new_model(config)
+    optimizer, scheduler = trainer.optimizer_and_scheduler(resumed, 2e-5, 2e-5, 2)
+    logger = TrainingLogger(output, contract, resume_step=2)
+    result = trainer.train_steps(resumed, optimizer, scheduler, records * 2, records, collator,
+                                 output, contract, logger, torch.device('cpu'), torch.float32,
+                                 resume=checkpoint)
+    assert result['complete'] and logger.has_event('validation', 2)
+    logger.close()
