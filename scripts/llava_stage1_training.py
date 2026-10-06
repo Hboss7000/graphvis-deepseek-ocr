@@ -134,6 +134,9 @@ def save_checkpoint(model, optimizer, scheduler, destination, run_config, step, 
     import numpy as np
     import torch
     destination = Path(destination)
+    from stage1_storage import checkpoint_budget, check_free_space
+    budget = check_free_space(destination.parent, checkpoint_budget(model, optimizer, projector(model), run_config))
+    print('CHECKPOINT DISK BUDGET: ' + json.dumps(budget, sort_keys=True), flush=True)
     temporary = destination.with_name(destination.name + '.incomplete')
     if destination.exists() or temporary.exists():
         raise FileExistsError(f'Checkpoint collision: {destination}')

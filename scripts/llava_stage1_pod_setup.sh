@@ -6,31 +6,40 @@ export HF_HOME="$WORKSPACE/.cache/huggingface"
 export HF_HUB_CACHE="$HF_HOME/hub" HUGGINGFACE_HUB_CACHE="$HF_HOME/hub"
 export XDG_CACHE_HOME="$WORKSPACE/.cache" TORCH_HOME="$WORKSPACE/.cache/torch"
 export CUDA_CACHE_PATH="$WORKSPACE/.cache/cuda" TRITON_CACHE_DIR="$WORKSPACE/.cache/triton"
-export PIP_CACHE_DIR="$WORKSPACE/.cache/pip"
-export TMPDIR="$WORKSPACE/.cache/tmp"
+export PIP_NO_CACHE_DIR=1
+export PIP_CONFIG_FILE=/dev/null PIP_EXTRA_INDEX_URL=
 export MLFLOW_DISABLE_TELEMETRY=true MLFLOW_DISABLE_AGENT_HINT=true
 PROJECT="$WORKSPACE/bachelorArbeit"
 TRAIN_ENV="$WORKSPACE/venvs/venv_train"
 test -n "${TMUX:-}" || { echo 'Setup must run inside tmux.' >&2; exit 1; }
-trap 'echo "SETUP FINISHED/FAILED: STOP the Pod after reviewing the log."' EXIT
-exec 9>"$WORKSPACE/.fullrun_gpu.lock"
+trap 'df -h "$WORKSPACE"; echo "SETUP FINISHED/FAILED: STOP the Pod after reviewing the log."' EXIT
+df -h "$WORKSPACE"
+exec 9>>"$WORKSPACE/.fullrun_gpu.lock"
 flock -n 9 || { echo 'Another GPU session holds the workspace lock.' >&2; exit 1; }
 test ! -e "$TRAIN_ENV"
-command -v python3.12 >/dev/null || { echo 'Python 3.12 unavailable; stop without substituting.' >&2; exit 1; }
-mkdir -p "$WORKSPACE/venvs" "$PIP_CACHE_DIR" "$TMPDIR" "$HF_HOME"
-python3.12 -m venv "$TRAIN_ENV"
-"$TRAIN_ENV/bin/python" -m pip install --constraint "$PROJECT/env/constraints_llava_train.txt" \
+SYSTEM_PYTHON=$(bash "$PROJECT/scripts/stage1_train_interpreter.sh" "$WORKSPACE")
+"$SYSTEM_PYTHON" -c 'import sys; print("Selected interpreter:",sys.executable); print("Python:",sys.version)'
+if "$SYSTEM_PYTHON" "$PROJECT/scripts/stage1_weight_cache.py" --cache "$HF_HOME" --backbone llava; then
+  echo 'Pinned LLaVA cache is complete: skipping all weight downloads; cache remains untouched.'
+else
+  echo 'Pinned cache is incomplete: setup will not download or overwrite weights; offline jobs must wait for separately authorized caching.'
+fi
+[[ "${ALLOW_PYTORCH_CUDA_INDEX:-no}" == yes ]] || { echo 'Exact +cu128 pins are absent from PyPI. Source exception for the official PyTorch index is required; no installation performed.' >&2; exit 2; }
+test ! -e "$WORKSPACE/venvs/freeze_venv_train.txt"
+mkdir -p "$WORKSPACE/venvs"
+"$SYSTEM_PYTHON" -m venv "$TRAIN_ENV"
+export TMPDIR="$TRAIN_ENV/.install_tmp"
+mkdir "$TMPDIR"
+"$TRAIN_ENV/bin/python" -m pip install --no-cache-dir --constraint "$PROJECT/env/constraints_llava_train.txt" \
   torch==2.8.0+cu128 torchvision==0.23.0+cu128 \
   --index-url https://download.pytorch.org/whl/cu128 --extra-index-url https://pypi.org/simple
-"$TRAIN_ENV/bin/python" -m pip install --constraint "$PROJECT/env/constraints_llava_train.txt" \
+"$TRAIN_ENV/bin/python" -m pip install --no-cache-dir --index-url https://pypi.org/simple \
+  --constraint "$PROJECT/env/constraints_llava_train.txt" \
   --requirement "$PROJECT/env/requirements_llava_train.txt"
 "$TRAIN_ENV/bin/python" -m pip check
-"$TRAIN_ENV/bin/python" -m pip freeze > "$WORKSPACE/venvs/freeze_venv_train.txt"
+{ "$TRAIN_ENV/bin/python" -c 'import sys; print("# interpreter="+sys.executable); print("# base_interpreter="+sys._base_executable); print("# python="+sys.version.replace("\n"," "))';
+  "$TRAIN_ENV/bin/python" -m pip freeze; } > "$WORKSPACE/venvs/freeze_venv_train.txt"
 "$TRAIN_ENV/bin/python" - <<'PY'
-from huggingface_hub import snapshot_download
 for name in ('torch', 'transformers', 'peft', 'accelerate', 'mlflow'):
     print(name, __import__(name).__version__, flush=True)
-snapshot_download('llava-hf/llava-v1.6-mistral-7b-hf',
-                  revision='2424fdd47412fccc66d91719126b420e9fbd7065',
-                  allow_patterns=['*.safetensors', '*.json', '*.model'])
 PY

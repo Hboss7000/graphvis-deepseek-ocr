@@ -1,5 +1,5 @@
 {
-  "cpu_check_command": "OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 .venv_llava_cpu/bin/python -m pytest -q tests/llava_stage1_training_cpu_checks.py tests/test_llava_stage1_training_data.py tests/test_llava_stage1_diagnostics.py tests/test_llava_runners.py tests/test_llava_stage1_execution.py",
+  "cpu_check_command": "OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 .venv_llava_cpu/bin/python -m pytest -q tests/llava_stage1_training_cpu_checks.py tests/test_llava_stage1_training_data.py tests/test_llava_stage1_diagnostics.py tests/test_llava_runners.py tests/test_llava_stage1_execution.py tests/test_stage1_storage.py",
   "date": "2026-10-06",
   "environment": {
     "directory": ".venv_llava_cpu",
@@ -27,6 +27,17 @@
     "tmux pod launch and monitoring commands"
   ],
   "status": "STOP POINT 1 COMPLETE: CPU token audit, forward/backward/resume passed",
+  "storage_estimate": {
+    "adapter_dtype": "float32",
+    "checkpoint_raw_bytes": 4152410112,
+    "lora_parameters": 335544320,
+    "projector_dtype": "bf16",
+    "projector_parameters": 20979712,
+    "real_checkpoint_file_size_unmeasured": true,
+    "required_free_GiB_conservative": 8.123143005371094,
+    "user_reported_used_GB": 70,
+    "user_reported_volume_GB": 100
+  },
   "subsets": {
     "training": {
       "answer_characters_per_task": {
@@ -289,7 +300,7 @@
   "verified": {
     "adapter_projector_inference_reload": "exact logits and greedy generation IDs on tiny random model",
     "comparison": "existing main and P3 Stage 1 and all four 500-row main QA arms validated and re-scored; P2/tuned explicitly missing",
-    "cpu_and_regression_tests_passed": 51,
+    "cpu_and_regression_tests_passed": 55,
     "csv_fallback": "continues after deliberately failed MLflow calls",
     "hashes_checked": 2608,
     "lightweight_tests_passed": 37,
@@ -300,6 +311,7 @@
     "pod_commands": "18 bash blocks syntax checked; five tmux launch blocks exercised with stub workers and explicit environment/LR propagation; real GPU execution unverified",
     "production_training_loop_resume": "passed on tiny float32 model with actual vision processing",
     "real_HF_PEFT_tiny_forward_backward_resume": "passed; exact parameters after resumed vs uninterrupted updates",
+    "storage_and_setup_checks": "retention, corruption protection, final preservation, free-space threshold, read-only complete/truncated cache and interpreter fallback passed",
     "test_question_ids_checked": 500,
     "token_distributions": "token_diagnostics_summary.json",
     "train_validation_test_question_id_overlap": 0,

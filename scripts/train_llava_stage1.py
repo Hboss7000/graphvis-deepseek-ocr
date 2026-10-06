@@ -15,6 +15,7 @@ from llava_common import DEFAULT_MODEL_ID, DEFAULT_REVISION, configure_processor
 from llava_stage1_training import (Stage1Collator, attach_lora, file_sha, load_checkpoint,
                                    save_checkpoint, training_text)
 from llava_training_logging import TrainingLogger
+from stage1_storage import InsufficientCheckpointSpace, retain_checkpoints
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -29,7 +30,7 @@ def optional_version(package):
 def code_hashes():
     return {name: file_sha(ROOT / 'scripts' / name) for name in
             ('train_llava_stage1.py', 'llava_stage1_training.py', 'llava_stage1_prompt.py',
-             'llava_common.py', 'llava_adapter.py', 'llava_training_logging.py')}
+             'llava_common.py', 'llava_adapter.py', 'llava_training_logging.py', 'stage1_storage.py')}
 
 
 def optimizer_and_scheduler(model, lr, projector_lr, steps):
@@ -161,8 +162,9 @@ def train_steps(model, optimizer, scheduler, records, validation_records, collat
             checkpoint = output_dir / f'checkpoint-{step:06d}'
             save_started = time.perf_counter()
             digest = save_checkpoint(model, optimizer, scheduler, checkpoint, config, step, cursor)
-            checkpoint_seconds += time.perf_counter() - save_started
             logger.checkpoint(checkpoint, digest)
+            retain_checkpoints(output_dir, checkpoint, config, keep=config.get('checkpoint_keep', 2))
+            checkpoint_seconds += time.perf_counter() - save_started
             saved_at = time.perf_counter()
         if step % 100 == 0 or step == config['optimizer_steps']:
             result = validation(model, validation_records, collator, device, dtype,
@@ -282,6 +284,7 @@ def main():
               'gradient_accumulation_steps': 16 // args.per_device_batch_size, 'model_max_length': 4096,
               'gradient_checkpointing': True, 'seed': 13, 'checkpoint_steps': 100,
               'checkpoint_max_seconds': 1200, 'validation_steps': 100, 'training_examples': len(records),
+              'checkpoint_keep': 2, 'checkpoint_keep_final': True, 'checkpoint_free_space_multiplier': 2,
               'validation_examples': len(val_records), 'data_manifest_sha256': file_sha(args.data_dir / 'data_manifest.json'),
               'token_diagnostics_sha256': file_sha(args.data_dir / 'token_diagnostics.json'),
               'subset_manifest_hashes': {k: v['sha256'] for k, v in manifest['subsets'].items()},
@@ -356,6 +359,11 @@ def main():
         if result['complete'] and args.mode in ('dry', 'smoke') and not report['passed']:
             raise RuntimeError('Smoke verification failed; inspect report and CSV')
         print(('COMPLETED' if result['complete'] else 'PAUSED') + ': STOP the Pod when finished reviewing.', flush=True)
+    except InsufficientCheckpointSpace as error:
+        logger.close('KILLED')
+        print(str(error), flush=True)
+        (args.output_dir / 'disk_pause.json').write_text(json.dumps({'reason': str(error), 'status': 'PAUSED'}) + '\n')
+        raise SystemExit(75)
     except BaseException:
         if not logger.handle.closed:
             logger.close('FAILED')

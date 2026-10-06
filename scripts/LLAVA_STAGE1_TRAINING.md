@@ -17,34 +17,32 @@ pin and the requested file store with `MLFLOW_ALLOW_FILE_STORE=true`.
 CPU tests verified PEFT compatibility, file-store writes/reads, and no network
 connections during logging. Training uses no MLflow server or model artifacts.
 
-After explicit installation approval, on the pod. This is the setup worker's
-installation body; use the complete tmux launch under “Pod prerequisites” below:
+The setup selector prefers usable `python3.12`; otherwise it uses
+`readlink -f /workspace/venvs/venv_qwen/bin/python`. The existing setup log verifies
+`/opt/conda/bin/python` at 3.11.13 as the original pod interpreter. No apt,
+deadsnakes or Python installation is performed. Stop only if neither interpreter
+exists or a pinned dependency cannot install. The selected executable and Python
+version are recorded in the setup log and `freeze_venv_train.txt`.
+
+Read-only pre-check, on an existing authorized pod:
 
 ```bash
 export WORKSPACE=/workspace
-export HF_HOME="$WORKSPACE/.cache/huggingface"
-export PIP_CACHE_DIR="$WORKSPACE/.cache/pip"
-export TMPDIR="$WORKSPACE/.cache/tmp"
-test -n "${TMUX:-}"
-mkdir -p "$WORKSPACE/.cache/tmp" "$WORKSPACE/logs" "$WORKSPACE/venvs"
-exec > >(tee -a "$WORKSPACE/logs/llava_stage1_setup.log") 2>&1
-test ! -e "$WORKSPACE/venvs/venv_train"
-python3.12 -m venv "$WORKSPACE/venvs/venv_train"
-"$WORKSPACE/venvs/venv_train/bin/python" -m pip install \
-  --constraint "$WORKSPACE/bachelorArbeit/env/constraints_llava_train.txt" \
-  torch==2.8.0+cu128 torchvision==0.23.0+cu128 \
-  --index-url https://download.pytorch.org/whl/cu128 --extra-index-url https://pypi.org/simple
-"$WORKSPACE/venvs/venv_train/bin/python" -m pip install \
-  --constraint "$WORKSPACE/bachelorArbeit/env/constraints_llava_train.txt" \
-  --requirement "$WORKSPACE/bachelorArbeit/env/requirements_llava_train.txt"
-"$WORKSPACE/venvs/venv_train/bin/python" -m pip check
-"$WORKSPACE/venvs/venv_train/bin/python" -m pip freeze \
-  > "$WORKSPACE/venvs/freeze_venv_train.txt"
+export PROJECT="$WORKSPACE/bachelorArbeit"
+export SYSTEM_PYTHON=$(bash "$PROJECT/scripts/stage1_train_interpreter.sh" "$WORKSPACE")
+"$SYSTEM_PYTHON" -c 'import sys; print("Selected interpreter:",sys.executable); print("Python:",sys.version)'
+df -h "$WORKSPACE"
 ```
 
-If Python 3.12 or a required pinned release is unavailable, stop; do not substitute
-another version. CPU tests need a separate **laptop** environment because the
-existing laptop environments lack transformers/PEFT and use Python 3.14.
+The exact installation commands are in `llava_stage1_pod_setup.sh`, launched in
+tmux below. Environment installation does not download or overwrite weights.
+The last installation approval said **PyPI only**. PyPI does not publish the exact
+`torch==2.8.0+cu128` / `torchvision==0.23.0+cu128` requirement versions, so setup
+refuses before creating the venv unless a source exception for the official CUDA
+index is separately granted (`ALLOW_PYTORCH_CUDA_INDEX=yes`). Other packages use
+PyPI, pinned constraints remain unchanged, and no other installs occur. No pip
+cache is written; installation temporary files stay inside the new venv.
+
 The approved laptop environment was installed separately in `.venv_llava_cpu`:
 
 ```bash
@@ -125,7 +123,7 @@ are in `experiments/2026-10-06_llava_stage1_training/`.
 | Train | 1804 / 2244 / 2892 / 3234 | 10 / 17.5 / 256 / 306 | 5536 / 7200 |
 | Validation | 1804 / 2247.5 / 2740.7 / 3166 | 10 / 17 / 250.15 / 293 | 489 / 600 |
 
-51 CPU/regression checks passed, including the production loop,
+55 CPU/regression checks passed, including the production loop,
 exact optimizer/scheduler/RNG continuation, adapter+projector inference reload
 with identical logits, readable file store with sockets forbidden, and CSV
 continuation after simulated MLflow failure. These checks use tiny random weights,
@@ -184,7 +182,30 @@ after at most 20 minutes between completed steps. Save before validation; a
 validation crash retains the update and replays missing validation on resume.
 `--resume CHECKPOINT_ROOT`
 restores the exact continuation and rejects recipe/code/data drift. Failed writes
-never publish an incomplete checkpoint. Checkpoints/caches/logs stay in /workspace.
+never publish an incomplete checkpoint. Keep the latest **two intact checkpoints
+plus the final one**. Prune this run's older saves only after the newly published
+checkpoint verifies; preserve the previous resume point until then. Before every
+save, stop cleanly with exit 75 if free space is below **2 × the conservative
+checkpoint size estimate**, keeping the last intact save. Each save logs tensor
+sizes/dtypes and disk budget; the pod worker logs `df -h /workspace` at start/end.
+Checkpoints/caches/logs stay in /workspace.
+
+The pinned LLaVA architecture gives 335,544,320 LoRA parameters (PEFT float32)
+and 20,979,712 projector parameters (bf16). AdamW has two moment tensors at each
+parameter's dtype. The tensor payload of one complete checkpoint is approximately
+**4.15 GB / 3.87 GiB**, excluding small serialization/config/RNG overhead. The
+save guard adds 5% plus overhead: roughly **8.12 GiB free** is required before a
+save. Retention temporarily holds three saves while the new one verifies:
+approximately **12.5 GB raw**, or **13.1 GB budgeted**, then two remain. These are
+architecture/dtype estimates; the real run logs actual tensor counts and file sizes.
+
+With the reported 100 GB volume / 70 GB used, cached weights already included,
+reserve about 0.65 GB for the new rendered training data and 0.25 GB for evaluation,
+metrics and logs. Expected peak is approximately **84 GB + the new training venv
+size** (about 90 GB if the venv adds 6 GB). This is a planning example, not a
+measured free-space claim. Installation scratch and other active jobs can add
+usage; the pre-check and per-save guard use actual disk free space. Evaluation
+reuses the retained adapter and base snapshot without creating base-weight copies.
 
 Mandatory metrics.csv logs loss, both rates, gradient norm, actual tokens/s,
 examples/s, step time and `torch.cuda.max_memory_allocated`. MLflow calls are
@@ -231,15 +252,18 @@ actual SSH/volume connection; no host has been supplied or guessed. Training and
 evaluation verify the manifests before starting. Graphviz never runs on the pod.
 
 The isolated installation commands in the first section are also packaged in
-`scripts/llava_stage1_pod_setup.sh`; it downloads the pinned weights once into
-HF_HOME. Invoke it **only after separate GPU-pod and environment approval**:
+`scripts/llava_stage1_pod_setup.sh`; it checks the pinned cache read-only.
+A complete snapshot is reused and all weight downloads are skipped. An incomplete
+snapshot is reported without downloading or overwriting the cache; offline jobs
+must wait for a separately authorized cache fill. No model cache is altered. Invoke it **only after separate GPU-pod and environment approval**:
 
 ```bash
 export WORKSPACE=/workspace
 export PROJECT="$WORKSPACE/bachelorArbeit"
-export LOG="$WORKSPACE/logs/llava_stage1_setup.log"
+export LOG="$WORKSPACE/logs/llava_stage1_setup_$(date -u +%Y%m%dT%H%M%SZ).log"
+export ALLOW_PYTORCH_CUDA_INDEX=${ALLOW_PYTORCH_CUDA_INDEX:-no}
 mkdir -p "$WORKSPACE/logs"
-tmux new-session -d -s llava-setup "env WORKSPACE='$WORKSPACE' timeout --signal=INT --kill-after=120s 14400 bash '$PROJECT/scripts/llava_stage1_pod_setup.sh' >'$LOG' 2>&1"
+tmux new-session -d -s llava-setup "env WORKSPACE='$WORKSPACE' ALLOW_PYTORCH_CUDA_INDEX='$ALLOW_PYTORCH_CUDA_INDEX' timeout --signal=INT --kill-after=120s 14400 bash '$PROJECT/scripts/llava_stage1_pod_setup.sh' >'$LOG' 2>&1"
 tail -n 80 "$LOG"
 nvidia-smi
 ```
@@ -251,6 +275,53 @@ are on the volume, including Hugging Face, pip, torch, CUDA and Triton caches.
 The setup script does not touch venv_qwen or venv_ocr2.
 
 ## Today's probe and smoke commands
+
+Laptop → pod upload: sizes first, then pull Henrique's pushed commits and upload
+the two new input directories. This block prompts for the real IP/port; it does
+not create/start a pod. `--ignore-existing` preserves existing data files; any
+incorrect old file produces a manifest failure instead of an overwrite.
+
+```bash
+export LOCAL_ROOT="$PWD"
+export REMOTE_ROOT=/workspace/bachelorArbeit
+read -rp 'Existing pod IP: ' POD_IP
+read -rp 'SSH port: ' POD_PORT
+read -rp 'SSH private key path: ' POD_KEY
+export RSYNC_RSH="ssh -p $POD_PORT -i \"$POD_KEY\""
+du -sh "$LOCAL_ROOT/outputs/llava_stage1_training_2026-10-06" "$LOCAL_ROOT/outputs/llava_stage1_eval_inputs"
+ssh -p "$POD_PORT" -i "$POD_KEY" "root@$POD_IP" 'cd /workspace/bachelorArbeit && git pull --ff-only && df -h /workspace'
+rsync -a --checksum --ignore-existing -e "$RSYNC_RSH" "$LOCAL_ROOT/outputs/llava_stage1_training_2026-10-06/" "root@$POD_IP:$REMOTE_ROOT/outputs/llava_stage1_training_2026-10-06/"
+rsync -a --checksum --ignore-existing -e "$RSYNC_RSH" "$LOCAL_ROOT/outputs/llava_stage1_eval_inputs/" "root@$POD_IP:$REMOTE_ROOT/outputs/llava_stage1_eval_inputs/"
+```
+
+After each laptop plan calculation, copy the measured plan back with this separate,
+self-contained block. Preserve any preceding plan as a timestamped backup:
+
+```bash
+export LOCAL_PLAN="$PWD/outputs/llava_stage1_fetched/execution_plan.json"
+export REMOTE_PLAN=/workspace/outputs/llava_stage1/execution_plan.json
+read -rp 'Existing pod IP: ' POD_IP
+read -rp 'SSH port: ' POD_PORT
+read -rp 'SSH private key path: ' POD_KEY
+export RSYNC_RSH="ssh -p $POD_PORT -i \"$POD_KEY\""
+test -f "$LOCAL_PLAN"
+rsync -a --backup --suffix=".previous.$(date -u +%Y%m%dT%H%M%SZ)" -e "$RSYNC_RSH" "$LOCAL_PLAN" "root@$POD_IP:$REMOTE_PLAN"
+```
+
+Fetch reports, predictions and MLflow after a job; optimizer checkpoint files stay
+on the volume. This block works for probe/smoke/training/evaluation and preserves
+the expected laptop paths used by the plan/plot/comparison commands:
+
+```bash
+export FETCHED="$PWD/outputs/llava_stage1_fetched"
+read -rp 'Existing pod IP: ' POD_IP
+read -rp 'SSH port: ' POD_PORT
+read -rp 'SSH private key path: ' POD_KEY
+export RSYNC_RSH="ssh -p $POD_PORT -i \"$POD_KEY\""
+mkdir -p "$FETCHED/mlruns"
+rsync -a --exclude='checkpoint-*/' -e "$RSYNC_RSH" "root@$POD_IP:/workspace/outputs/llava_stage1/" "$FETCHED/"
+rsync -a -e "$RSYNC_RSH" "root@$POD_IP:/workspace/mlruns/" "$FETCHED/mlruns/"
+```
 
 First measure capacity on the **eight longest audited training records**, two
 optimizer steps, with the complete real model/image/vision/collator path. Probe

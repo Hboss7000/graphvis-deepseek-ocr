@@ -28,7 +28,8 @@ cd "$PROJECT"
 test -n "${TMUX:-}" || { echo 'Use the documented tmux launch command.' >&2; exit 1; }
 exec 9>"$WORKSPACE/.fullrun_gpu.lock"
 flock -n 9 || { echo 'Another GPU session holds the workspace lock.' >&2; exit 1; }
-trap 'rc=$?; if (( rc )); then echo "FAILED/PAUSED ($rc): STOP the Pod. Inspect logs before retrying."; else echo "JOB COMPLETED/PAUSED: STOP the Pod if finished."; fi' EXIT
+trap 'rc=$?; df -h "$WORKSPACE"; if (( rc )); then echo "FAILED/PAUSED ($rc): STOP the Pod. Inspect logs before retrying."; else echo "JOB COMPLETED/PAUSED: STOP the Pod if finished."; fi' EXIT
+df -h "$WORKSPACE"
 COMMON=(--data-dir "$DATA" --lora-lr "$LORA_LR" --projector-lr "$PROJECTOR_LR")
 if [[ "$JOB" != probe ]]; then
   PROBE="$BASE/probe/batch_probe_report.json"
