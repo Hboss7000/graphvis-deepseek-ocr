@@ -15,6 +15,8 @@ import time
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
+    p.add_argument('--backbone', choices=('llava', 'qwen'), default='llava')
+    p.add_argument('--token-diagnostics', type=Path)
     p.add_argument('--data-dir', type=Path, required=True)
     p.add_argument('--output-dir', type=Path, required=True)
     p.add_argument('--log-dir', type=Path, required=True)
@@ -28,11 +30,13 @@ def main():
     attempts = []
     for batch in (16, 8, 4, 2, 1):
         output = args.output_dir / f'batch-{batch}'
-        log_path = args.log_dir / f'llava-batch-{batch}.log'
-        command = [sys.executable, str(Path(__file__).with_name('train_llava_stage1.py')),
+        log_path = args.log_dir / f'{args.backbone}-batch-{batch}.log'
+        command = [sys.executable, str(Path(__file__).with_name(f'train_{args.backbone}_stage1.py')),
                    '--mode', 'dry', '--data-dir', str(args.data_dir), '--output-dir', str(output),
                    '--per-device-batch-size', str(batch), '--lora-lr', str(args.lora_lr),
                    '--projector-lr', str(args.projector_lr)]
+        if args.token_diagnostics:
+            command += ['--token-diagnostics', str(args.token_diagnostics)]
         print('DRY CANDIDATE: ' + json.dumps(command), flush=True)
         start = time.perf_counter()
         with log_path.open('x') as handle:

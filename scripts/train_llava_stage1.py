@@ -13,7 +13,7 @@ import time
 
 from llava_common import DEFAULT_MODEL_ID, DEFAULT_REVISION, configure_processor, prepare_inputs
 from llava_stage1_training import (Stage1Collator, attach_lora, file_sha, load_checkpoint,
-                                   save_checkpoint, training_text)
+                                   save_checkpoint, training_text, projector)
 from llava_training_logging import TrainingLogger
 from stage1_storage import InsufficientCheckpointSpace, retain_checkpoints
 
@@ -27,19 +27,22 @@ def optional_version(package):
         return None
 
 
-def code_hashes():
+def code_hashes(backbone='llava'):
     return {name: file_sha(ROOT / 'scripts' / name) for name in
             ('train_llava_stage1.py', 'llava_stage1_training.py', 'llava_stage1_prompt.py',
-             'llava_common.py', 'llava_adapter.py', 'llava_training_logging.py', 'stage1_storage.py')}
+             'llava_common.py', 'llava_adapter.py', 'llava_training_logging.py', 'stage1_storage.py',
+             *(() if backbone == 'llava' else ('qwen_stage1_training.py', 'train_qwen_stage1.py')))} | ({} if backbone == 'llava' else {
+        'run_zero_shot_qwen.py': file_sha(ROOT / 'experiments/2026-08-25_zero_shot_obqa_500_multimodal/scripts/run_zero_shot_qwen.py')})
 
 
 def optimizer_and_scheduler(model, lr, projector_lr, steps):
     import torch
     from transformers import get_cosine_schedule_with_warmup
     lora, projection = [], []
+    bridge_ids = {id(p) for p in projector(model).parameters()}
     for name, value in model.named_parameters():
         if value.requires_grad:
-            (projection if 'multi_modal_projector' in name else lora).append(value)
+            (projection if id(value) in bridge_ids else lora).append(value)
     if not lora or not projection:
         raise ValueError('Expected both LoRA and projector trainable parameters')
     optimizer = torch.optim.AdamW([
@@ -178,16 +181,16 @@ def train_steps(model, optimizer, scheduler, records, validation_records, collat
             'complete': step == config['optimizer_steps']}
 
 
-def load_records(data_dir, mode):
+def load_records(data_dir, mode, audit_path=None, revision=DEFAULT_REVISION, template='llava_v1'):
     manifest_path = data_dir / 'data_manifest.json'
     manifest = json.loads(manifest_path.read_text())
     for name, digest in manifest['files_sha256'].items():
         if file_sha(data_dir / name) != digest:
             raise ValueError(f'Data manifest mismatch: {name}')
-    audit_path = data_dir / 'token_diagnostics.json'
+    audit_path = audit_path or data_dir / 'token_diagnostics.json'
     audit = json.loads(audit_path.read_text())
     if (audit['data_manifest_sha256'] != file_sha(manifest_path) or audit['model_max_length'] != 4096
-            or audit['revision'] != DEFAULT_REVISION or audit['template'] != 'llava_v1'
+            or audit['revision'] != revision or audit['template'] != template
             or audit['overlength_examples']):
         raise ValueError('Missing/incompatible zero-overlength audit')
     result = []
@@ -209,10 +212,11 @@ def load_records(data_dir, mode):
     return *result, manifest, audit
 
 
-def parse_args():
+def parse_args(backbone='llava'):
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--data-dir', type=Path, required=True)
     p.add_argument('--output-dir', type=Path, required=True)
+    p.add_argument('--token-diagnostics', type=Path, help='Qwen audit of the reused manifests')
     p.add_argument('--mode', choices=('dry', 'smoke', 'full'), required=True)
     p.add_argument('--per-device-batch-size', type=int, default=1)
     p.add_argument('--lora-lr', type=float, default=2e-5)
@@ -223,14 +227,26 @@ def parse_args():
     return p.parse_args()
 
 
-def main():
-    args = parse_args()
+def main(backbone='llava'):
+    args = parse_args(backbone)
+    if backbone not in ('llava', 'qwen'):
+        raise ValueError('Unknown backbone')
+    model_id, revision, template = DEFAULT_MODEL_ID, DEFAULT_REVISION, 'llava_v1'
+    collator_class, attach, text = Stage1Collator, attach_lora, training_text
+    if backbone == 'qwen':
+        import qwen_stage1_training as qwen
+        model_id, revision, template = qwen.DEFAULT_MODEL_ID, qwen.DEFAULT_REVISION, qwen.TEMPLATE
+        collator_class, attach, text = qwen.Stage1Collator, qwen.attach_lora, qwen.training_text
+        if args.token_diagnostics is None or (args.lora_lr, args.projector_lr) != (2e-5, 2e-5):
+            raise ValueError('Qwen requires its audited native lengths and the fixed 2e-5 learning rates')
     import torch
     import transformers
-    from transformers import LlavaNextConfig, LlavaNextForConditionalGeneration, LlavaNextProcessor
+    from transformers import LlavaNextConfig, LlavaNextForConditionalGeneration, LlavaNextProcessor, Qwen3VLForConditionalGeneration
+    model_class = LlavaNextForConditionalGeneration if backbone == 'llava' else Qwen3VLForConditionalGeneration
+    audit_path = args.token_diagnostics or args.data_dir / 'token_diagnostics.json'
     from llava_adapter import load_adapter
     workspace = Path(os.environ.get('WORKSPACE', '/workspace')).resolve()
-    for path in (args.data_dir, args.output_dir, Path(os.environ.get('HF_HOME', ''))):
+    for path in (args.data_dir, args.output_dir, audit_path, Path(os.environ.get('HF_HOME', ''))):
         if not path.resolve().is_relative_to(workspace):
             raise ValueError('Pod inputs/outputs/cache must be under WORKSPACE')
     if not os.environ.get('TMUX'):
@@ -243,20 +259,20 @@ def main():
         raise ValueError('Expected the approved RTX PRO 6000 with bf16 support')
     if args.per_device_batch_size not in (1, 2, 4, 8, 16) or min(args.lora_lr, args.projector_lr) <= 0:
         raise ValueError('Microbatch must divide global batch 16; learning rates must be positive')
-    records, val_records, manifest, audit = load_records(args.data_dir, args.mode)
+    records, val_records, manifest, audit = load_records(args.data_dir, args.mode, audit_path, revision, template)
     if args.mode == 'full':
         if args.smoke_report is None:
             raise ValueError('Full training requires a separately reviewed successful smoke report')
         evidence = json.loads(args.smoke_report.read_text())
-        required = {'model_id': DEFAULT_MODEL_ID, 'model_revision': DEFAULT_REVISION,
+        required = {'model_id': model_id, 'model_revision': revision,
                     'data_manifest_sha256': file_sha(args.data_dir / 'data_manifest.json'),
-                    'token_diagnostics_sha256': file_sha(args.data_dir / 'token_diagnostics.json'),
+                    'token_diagnostics_sha256': file_sha(audit_path),
                     'per_device_batch_size': args.per_device_batch_size,
                     'lora_lr': args.lora_lr, 'projector_lr': args.projector_lr,
                     'mode': 'smoke', 'dtype': 'bf16', 'step': 20, 'optimizer_steps': 20,
                     'training_examples': 64, 'complete': True, 'resume_verified': True,
                     'adapter_reload_identical': True, 'mlflow_readable': True,
-                    'gpu_type': torch.cuda.get_device_name(0), 'code_sha256': code_hashes()}
+                    'gpu_type': torch.cuda.get_device_name(0), 'code_sha256': code_hashes(backbone)}
         if not evidence.get('passed') or any(evidence.get(k) != v for k, v in required.items()):
             raise ValueError('Smoke evidence does not match this full-run recipe')
     args.output_dir.mkdir(parents=True, exist_ok=True)
@@ -264,18 +280,28 @@ def main():
         raise FileExistsError('Use a fresh output directory or --resume')
     transformers.set_seed(13)
     torch.backends.cuda.matmul.allow_tf32 = True
-    processor = LlavaNextProcessor.from_pretrained(DEFAULT_MODEL_ID, revision=DEFAULT_REVISION, local_files_only=True)
-    model_config = LlavaNextConfig.from_pretrained(DEFAULT_MODEL_ID, revision=DEFAULT_REVISION, local_files_only=True)
-    processor_settings = configure_processor(processor, model_config)
-    collator = Stage1Collator(processor, args.data_dir)
-    base = LlavaNextForConditionalGeneration.from_pretrained(DEFAULT_MODEL_ID, revision=DEFAULT_REVISION,
-        dtype=torch.bfloat16, local_files_only=True).to('cuda')
-    model, names = attach_lora(base)
+    if backbone == 'llava':
+        processor = LlavaNextProcessor.from_pretrained(model_id, revision=revision, local_files_only=True)
+        model_config = LlavaNextConfig.from_pretrained(model_id, revision=revision, local_files_only=True)
+        processor_settings = configure_processor(processor, model_config)
+        image_processing = 'same pinned inference anyres processor'
+    else:
+        processor, api = qwen.pinned_processor()
+        processor_settings = {'min_pixels': qwen.DEFAULT_MIN_PIXELS, 'max_pixels': qwen.DEFAULT_MAX_PIXELS,
+                              'processor_pixel_budget_api': api, 'default_system_prompt_injected': False}
+        if (audit.get('min_pixels'), audit.get('max_pixels')) != (qwen.DEFAULT_MIN_PIXELS, qwen.DEFAULT_MAX_PIXELS):
+            raise ValueError('Qwen audit image budget differs')
+        image_processing = 'same pinned inference dynamic-resolution processor'
+    collator = collator_class(processor, args.data_dir)
+    load_kwargs = {'attn_implementation': 'sdpa'} if backbone == 'qwen' else {}
+    base = model_class.from_pretrained(model_id, revision=revision,
+        dtype=torch.bfloat16, local_files_only=True, **load_kwargs).to('cuda')
+    model, names = attach(base)
     model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={'use_reentrant': False})
     steps = {'dry': 2, 'smoke': 20, 'full': math.ceil(len(records) / 16)}[args.mode]
-    config = {'model_id': DEFAULT_MODEL_ID, 'model_revision': DEFAULT_REVISION, 'template': 'llava_v1',
+    config = {'model_id': model_id, 'model_revision': revision, 'template': template,
               'mode': args.mode, 'dtype': 'bf16', 'vision_tower_frozen': True,
-              'image_processing': 'same pinned inference anyres processor', 'processor_settings': processor_settings,
+              'image_processing': image_processing, 'processor_settings': processor_settings,
               'lora_r': 128, 'lora_alpha': 256, 'lora_dropout': .05, 'lora_target_modules': names,
               'projector_trained': True, 'lora_lr': args.lora_lr, 'projector_lr': args.projector_lr,
               'weight_decay': 0., 'warmup_ratio': .03, 'scheduler': 'cosine', 'max_grad_norm': 1.,
@@ -286,15 +312,19 @@ def main():
               'checkpoint_max_seconds': 1200, 'validation_steps': 100, 'training_examples': len(records),
               'checkpoint_keep': 2, 'checkpoint_keep_final': True, 'checkpoint_free_space_multiplier': 2,
               'validation_examples': len(val_records), 'data_manifest_sha256': file_sha(args.data_dir / 'data_manifest.json'),
-              'token_diagnostics_sha256': file_sha(args.data_dir / 'token_diagnostics.json'),
+              'token_diagnostics_sha256': file_sha(audit_path),
               'subset_manifest_hashes': {k: v['sha256'] for k, v in manifest['subsets'].items()},
               'length_distributions': {k: {n: v[n] for n in ('total_tokens', 'answer_eos_tokens', 'exceed_4096')}
                                        for k, v in audit['subsets'].items()},
               'git_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
-              'code_sha256': code_hashes(),
+              'code_sha256': code_hashes(backbone),
               'gpu_type': torch.cuda.get_device_name(0),
               'versions': {name: __import__(name).__version__ for name in ('torch', 'transformers', 'peft', 'accelerate')},
               'mlflow_version': optional_version('mlflow')}
+    if backbone == 'qwen':
+        config['merger_bridges'] = ['model.visual.merger', *[f'model.visual.deepstack_merger_list.{i}' for i in range(3)]]
+        config['merger_parameter_names'] = [n for n, p in model.named_parameters() if p.requires_grad and 'lora_' not in n]
+        config['attention_implementation'] = 'sdpa'
     print('RUN CONFIG: ' + json.dumps(config, sort_keys=True), flush=True)
     optimizer, scheduler = optimizer_and_scheduler(model, args.lora_lr, args.projector_lr, steps)
     resume_step = json.loads((args.resume / 'run_config.json').read_text()) if args.resume else None
@@ -316,10 +346,13 @@ def main():
         report = {**config, **{k: v for k, v in result.items() if k != 'metrics'}}
         if result['complete'] and args.mode in ('dry', 'smoke'):
             # Reload in a fresh model to exercise the exact evaluation loader.
-            prompt, _ = training_text(processor, records[0])
+            prompt, _ = text(processor, records[0])
             from PIL import Image
             with Image.open(args.data_dir / records[0]['image']) as image:
-                probe = move_batch(prepare_inputs(processor, prompt, image.convert('RGB')),
+                prepared = (prepare_inputs(processor, prompt, image.convert('RGB')) if backbone == 'llava' else
+                            qwen.prepare_inputs(processor, prompt, image.convert('RGB'),
+                                argparse.Namespace(min_pixels=qwen.DEFAULT_MIN_PIXELS, max_pixels=qwen.DEFAULT_MAX_PIXELS)))
+                probe = move_batch(prepared,
                                    torch.device('cuda'), torch.bfloat16)
             model.eval()
             model.config.use_cache = True
@@ -329,9 +362,9 @@ def main():
             del model, base, optimizer, scheduler
             gc.collect()
             torch.cuda.empty_cache()
-            reloaded = LlavaNextForConditionalGeneration.from_pretrained(DEFAULT_MODEL_ID, revision=DEFAULT_REVISION,
-                dtype=torch.bfloat16, local_files_only=True).to('cuda')
-            reloaded, artifact = load_adapter(reloaded, result['checkpoint'], DEFAULT_MODEL_ID, DEFAULT_REVISION)
+            reloaded = model_class.from_pretrained(model_id, revision=revision,
+                dtype=torch.bfloat16, local_files_only=True, **load_kwargs).to('cuda')
+            reloaded, artifact = load_adapter(reloaded, result['checkpoint'], model_id, revision)
             with torch.inference_mode():
                 actual = reloaded.generate(**probe, max_new_tokens=8, do_sample=False, num_beams=1, use_cache=True).cpu()
             report['adapter_reload_identical'] = torch.equal(expected, actual)
