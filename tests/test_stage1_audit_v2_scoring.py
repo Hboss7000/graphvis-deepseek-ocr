@@ -142,11 +142,15 @@ def test_count_subtotals_and_triple_explanations_are_not_predictions():
     assert parsed.value==[('sun','is a','body')]
 
 
-def test_corrected_default_is_available_in_all_stage1_runners(monkeypatch):
+def test_audit_v3_default_in_all_stage1_runners_with_v2_selectable(monkeypatch):
     import importlib
     for name in ('run_stage1_qwen','run_stage1_deepseek','run_stage1_llava','eval_gemma3_stage1'):
         module=importlib.import_module(name)
-        assert module.DEFAULT_EXTRACTOR=='audit_v2'
+        assert module.DEFAULT_EXTRACTOR=='audit_v3'
+        assert 'audit_v2' in module.EXTRACTORS
         assert module.score_record is dispatch.score_record
     import collect_stage1_matrix
-    assert collect_stage1_matrix.DEFAULT_EXTRACTOR=='audit_v2'
+    assert collect_stage1_matrix.DEFAULT_EXTRACTOR=='audit_v3'
+    for task in scorer.TASK_TYPES:
+        assert dispatch.score_record(record(task),GOLD[task],META)['scorer_version']=='audit_v3'
+        assert dispatch.score_record(record(task),GOLD[task],META,extractor='audit_v2')['scorer_version']=='audit_v2'

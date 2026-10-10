@@ -7,7 +7,7 @@ import score_stage1_audit_v2 as corrected
 import score_stage1_audit_v3 as frozen_v3
 
 EXTRACTORS = ('legacy', 'span', 'span_extended', 'template_v1', 'audit_v2', 'audit_v3')
-DEFAULT_EXTRACTOR = 'audit_v2'
+DEFAULT_EXTRACTOR = 'audit_v3'
 
 
 def implementation(extractor):

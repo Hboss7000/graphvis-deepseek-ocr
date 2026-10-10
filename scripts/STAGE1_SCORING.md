@@ -1,8 +1,17 @@
-# Corrected Stage 1 scoring (`audit_v2`)
+# Stage 1 scoring (`audit_v3` default; `audit_v2` historical)
 
-`audit_v2` is the default scorer in the Qwen, DeepSeek, LLaVA and Gemma Stage 1
-runners, shared run completion, and pruning-matrix collection. Generation
-settings and prompts are unchanged. `--extractor legacy`, `span`,
+`audit_v3` (frozen, SHA-256 `71e3294a…6081d96`) is the default scorer in the
+Qwen, DeepSeek, LLaVA and Gemma Stage 1 runners, shared run completion, and
+pruning-matrix collection. It is the official Stage 1 scorer; see
+`outputs/parser_v3_rescore_2026-10-10/REPORT.md` for the v2→v3 audit and
+`outputs/zero_shot_official_v3_2026-10-10/` for the official zero-shot tables.
+Select the previous scorer explicitly with `--extractor audit_v2`.
+Generation settings and prompts are unchanged.
+
+The rest of this document describes `audit_v2`, on which `audit_v3` builds;
+v3 adds the narrow rules listed in the parser-v3 audit.
+
+`--extractor legacy`, `span`,
 `span_extended`, or `template_v1` selects a historical implementation.
 The original `score_stage1.py` and `score_stage1_template_v1.py` remain frozen;
 the historical standalone scorer and rescore commands keep their old defaults.

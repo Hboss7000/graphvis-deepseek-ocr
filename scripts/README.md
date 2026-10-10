@@ -143,7 +143,8 @@ and paired-intersection tables, diagnostics and figures.
 
 ## Corrected Stage 1 extraction and scoring
 
-Stage 1 runners and pruning-matrix collection now default to `audit_v2`.
+Stage 1 runners and pruning-matrix collection now default to `audit_v3`
+(`--extractor audit_v2` selects the previous scorer).
 It extracts asserted task answers independently of gold and scores
 highest-degree answers jointly on the selected node and degree. Historical
 versions remain selectable with `--extractor`.
