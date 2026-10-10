@@ -22,8 +22,8 @@ from score_stage1 import (
     TASK_SETS,
     answer_format_diagnostics,
     require_task,
-    score_record,
 )
+from stage1_scoring import EXTRACTORS, DEFAULT_EXTRACTOR, score_record
 from stage1_common import (
     ANSWER_FORMATS,
     DEEPSEEK_PROMPT_VARIANTS,
@@ -36,6 +36,7 @@ from stage1_common import (
     prompts_sha256,
     score_completed_run,
     validate_stage1,
+    validate_deepseek_ablation_prompts,
     write_run_config,
 )
 
@@ -68,7 +69,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--expected-count", type=int, default=3000)
     parser.add_argument("--expected-split", choices=("train", "dev", "test"), default="test")
     parser.add_argument("--task-set", choices=TASK_SETS, default="paper")
-    parser.add_argument("--extractor", choices=("legacy", "span", "span_extended"), default="span")
+    parser.add_argument("--extractor", choices=EXTRACTORS, default=DEFAULT_EXTRACTOR)
     parser.add_argument("--answer-format", choices=ANSWER_FORMATS, default="none")
     parser.add_argument("--prompt-variant", choices=DEEPSEEK_PROMPT_VARIANTS, default="standard")
     parser.add_argument(
@@ -102,6 +103,7 @@ def main() -> None:
         args.input_jsonl, args.graph_metadata, args.expected_count, task_types,
         expected_split=args.expected_split,
     )
+    validate_deepseek_ablation_prompts(records)
     prompt_builder = lambda record: deepseek_image_prompt(
         record, args.answer_format, args.prompt_variant
     )

@@ -17,7 +17,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from time import perf_counter
 
-from score_stage1 import TASK_SETS, answer_format_diagnostics, require_task, score_record
+from score_stage1 import TASK_SETS, answer_format_diagnostics, require_task
+from stage1_scoring import EXTRACTORS, DEFAULT_EXTRACTOR, score_record
 from stage1_common import (
     ANSWER_FORMATS,
     answer_format_provenance,
@@ -70,7 +71,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--expected-count", type=int, required=True)
     parser.add_argument("--expected-split", choices=("train", "dev", "test"), default="test")
     parser.add_argument("--task-set", choices=TASK_SETS, default="extended")
-    parser.add_argument("--extractor", choices=("legacy", "span", "span_extended"), default="span")
+    parser.add_argument("--extractor", choices=EXTRACTORS, default=DEFAULT_EXTRACTOR)
     parser.add_argument("--answer-format", choices=ANSWER_FORMATS, default="none")
     parser.add_argument("--max-new-tokens", type=int, default=MAX_NEW_TOKENS)
     parser.add_argument("--seed", type=int, default=13)

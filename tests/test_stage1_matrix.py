@@ -172,6 +172,23 @@ def test_run_config_preserves_modality_and_is_resume_safe(tmp_path, monkeypatch)
         build.validate_run_config(cell, written)
 
 
+def test_run_config_records_frozen_per_model_prompt_policy(tmp_path, monkeypatch):
+    output = tmp_path / 'config'
+    output.mkdir()
+    frozen = {
+        'frozen_prompt_contract_sha256': 'contract',
+        'prompt_policy': {'models': {
+            'deepseek': {'answer_format': 'none'},
+            'qwen': {'answer_format': 'constrained'},
+            'gemma': {'answer_format': 'constrained'},
+        }},
+    }
+    monkeypatch.setenv('STAGE1_FROZEN_PROMPT_POLICY_JSON', json.dumps(frozen))
+    write_run_config(output, {'model_name': 'qwen'})
+    written = json.loads((output / 'run_config.json').read_text())
+    assert written['frozen_prompt'] == frozen
+
+
 def test_fixed_prompt_templates_ignore_prior_rng_consumption():
     records = [dict(statement_idx=4, task_type='node_number', prompt=prompt) for prompt in gen.NODE_NUMBER_PROMPTS]
     build.normalize_prompts(records, gen)

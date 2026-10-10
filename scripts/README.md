@@ -117,8 +117,36 @@ Separate follow-up: `eval_gemma3_stage1.py` and `eval_gemma3_stage2.py` still st
 `18/30/5` as pruning provenance. They should read the actual values from
 `graph_metadata`; this ablation change does not modify those evaluators.
 
+## Stage 1 prompt freeze
+
+The accepted `stage1_prompt_repilot_v2` decision is stored in
+`scripts/stage1_prompt_policy.json` and is hashed together with
+`stage1_common.py` by `runpod_stage1_session.sh freeze`.
+
+- Qwen3-VL and Gemma 3 use the natural-language constrained-answer suffix,
+  greedy decoding, and `max_new_tokens=2048`.
+- DeepSeek-OCR-2 uses the original GraphVis prompts (`answer_format=none`),
+  greedy decoding, and the remote `infer()` limit of 8192 tokens.
+
+DeepSeek's natural suffix had 0% format compliance. The completion condition
+improved strict accuracy only from 0/30 to 1/30, while producing repetition
+loops up to 8191 tokens and node-description latency up to 138 seconds per
+item. The legacy placeholder suffix returned a nonempty response for 0/30
+items. These failures outweigh the single strict completion gain, so the
+original GraphVis prompts are frozen for DeepSeek.
+
 ## Stage 1 pruning-condition matrix
 
 See [the matrix workflow](README_stage1_matrix.md) for controlled CPU dataset
 builds, a manifest-driven COMA job array using the existing three evaluators,
 and paired-intersection tables, diagnostics and figures.
+
+## Corrected Stage 1 extraction and scoring
+
+Stage 1 runners and pruning-matrix collection now default to `audit_v2`.
+It extracts asserted task answers independently of gold and scores
+highest-degree answers jointly on the selected node and degree. Historical
+versions remain selectable with `--extractor`.
+
+See [STAGE1_SCORING.md](STAGE1_SCORING.md) for rules, offline CPU rescoring,
+validation evidence and remaining parser limitations.

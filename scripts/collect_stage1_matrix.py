@@ -18,7 +18,8 @@ import textwrap
 
 from build_pruning_matrix import (ROOT, MODELS, load_manifest, validate_cell_data,
                                  validate_run_config, prediction_rows, read_jsonl, write_json, sha_file)
-from score_stage1 import EXTENDED_TASK_TYPES, aggregate_task, score_record
+from score_stage1 import EXTENDED_TASK_TYPES
+from stage1_scoring import EXTRACTORS, DEFAULT_EXTRACTOR, aggregate_task, score_record
 
 TASKS = EXTENDED_TASK_TYPES
 PRIMARY = {
@@ -87,7 +88,7 @@ def graph_diagnostics(cell, metadata):
                 overlap_statistics=audit.get('overlap_statistics'), overlap_note='Not measured by image_audit.py')
 
 
-def load_cell(cell):
+def load_cell(cell, extractor=DEFAULT_EXTRACTOR):
     records, metadata = validate_cell_data(cell)
     by_key = {(r['statement_idx'], r['task_type']): r for r in records}
     by_idx = {r['statement_idx']: r for r in metadata}
@@ -103,7 +104,7 @@ def load_cell(cell):
     for key, prediction in predictions.items():
         if 'raw_response' not in prediction:
             raise ValueError(f'Missing raw response: {cell["cell_id"]} {key}')
-        scored[key] = {**prediction, **score_record(by_key[key], prediction['raw_response'], by_idx[key[0]])}
+        scored[key] = {**prediction, **score_record(by_key[key], prediction['raw_response'], by_idx[key[0]], extractor=extractor)}
     complete = len(scored) == cell['expected_count']
     if complete:
         metrics_path = path / f"metrics_{cell['model']}.json"
@@ -138,8 +139,8 @@ def metric_denominator(name, aggregate, n_items):
     return n_items
 
 
-def collect(cells, legibility_mask_threshold=None):
-    loaded = [load_cell(cell) for cell in cells]
+def collect(cells, legibility_mask_threshold=None, extractor=DEFAULT_EXTRACTOR):
+    loaded = [load_cell(cell, extractor) for cell in cells]
     models = [m for m in MODELS if any(c['model'] == m for c in cells)]
     conditions = list(dict.fromkeys(c['condition'] for c in cells))
     long, coverage = [], []
@@ -155,7 +156,7 @@ def collect(cells, legibility_mask_threshold=None):
             legibility_masked = (legibility_mask_threshold is not None
                 and data['diagnostics']['illegible_fraction'] > legibility_mask_threshold)
             masked = data['preflight_failed'] or legibility_masked
-            coverage.append(dict(model=model, condition=cell['condition'], status=data['status'],
+            coverage.append(dict(extractor=extractor, model=model, condition=cell['condition'], status=data['status'],
                 expected_count=cell['expected_count'], realised_count=len(data['scored']),
                 intersection_count=len(intersection), eligible_intersection_count=len(eligible_intersection),
                 only_this_condition_count=len(only), nonshared_eligible_count=len(data['keys'] - eligible_intersection),
@@ -165,7 +166,7 @@ def collect(cells, legibility_mask_threshold=None):
             for scope, keys in [('intersection', intersection), ('full', set(data['scored']))]:
                 for task in TASKS:
                     rows = [data['scored'][k] for k in sorted(keys) if k[1] == task]
-                    metrics = aggregate_task(task, rows)
+                    metrics = aggregate_task(task, rows, extractor=extractor)
                     for metric, value in flatten_metrics(metrics).items():
                         status = data['status']
                         if masked and status != 'missing':
@@ -173,7 +174,7 @@ def collect(cells, legibility_mask_threshold=None):
                         if not rows and status not in ('missing', 'illegible'):
                             status = 'no_items'
                         unmasked = value if rows else None
-                        long.append(dict(model=model, condition=cell['condition'], task_type=task,
+                        long.append(dict(extractor=extractor, model=model, condition=cell['condition'], task_type=task,
                             n_items=len(rows), metric_name=metric,
                             value=unmasked if not masked else None,
                             unmasked_value=unmasked, scope=scope, status=status,
@@ -254,7 +255,7 @@ def summary_markdown(index, macros, coverage, models, conditions, n):
     lines = ['# Stage 1 pruning-condition comparison', '',
         f'Zero-shot image inference on the same **N={n} test statements** per condition. '
         'Nine tasks test whether a model can read the graph. Only pruning varies within each model.', '',
-        CONFOUNDS, '', 'Primary metric paths from `score_stage1.aggregate_task`:', '',
+        CONFOUNDS, '', f"Scorer version: `{coverage[0].get('extractor', 'span')}`. Primary metric paths:", '',
         '| Task | Scorer key |', '| --- | --- |']
     lines += [f'| {task} | `{PRIMARY[task]}` |' for task in TASKS]
     lines += ['', '## Headline scores and graph diagnostics', '',
@@ -384,6 +385,7 @@ def main():
     parser.add_argument('--manifest', type=Path, default=Path('outputs/pruning_matrix/manifest.jsonl'))
     parser.add_argument('--output-dir', type=Path, default=Path('outputs/stage1_matrix/collected'))
     parser.add_argument('--terminal-width', type=int, default=120)
+    parser.add_argument('--extractor', choices=EXTRACTORS, default=DEFAULT_EXTRACTOR)
     parser.add_argument('--no-plots', action='store_true', help='Explicitly omit derived figures')
     parser.add_argument('--legibility-mask-threshold', type=float, default=None,
         help='Blank a condition (status n/a (illegible)) when illegible_fraction exceeds this value. '
@@ -395,7 +397,7 @@ def main():
     if args.legibility_mask_threshold is not None and not 0 <= args.legibility_mask_threshold <= 1:
         raise ValueError('--legibility-mask-threshold must be within [0, 1]')
     cells = load_manifest(args.manifest, check_sources=True)
-    rows, coverage, models, conditions = collect(cells, args.legibility_mask_threshold)
+    rows, coverage, models, conditions = collect(cells, args.legibility_mask_threshold, args.extractor)
     index = primary_index(rows)
     macros = macro_rows(index, coverage, models, conditions)
     out = args.output_dir

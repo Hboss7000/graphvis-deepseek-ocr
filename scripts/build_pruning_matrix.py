@@ -60,6 +60,8 @@ SOURCE_FILES = [Path('scripts') / name for name in (
     'build_pruning_matrix.py', 'generate_graphvis_datasets.py', 'gemma3_common.py',
     'eval_gemma3_stage1.py', 'pruning_stats.py', 'image_audit.py')]
 SOURCE_FILES += [STAGE1 / name for name in ('score_stage1.py', 'stage1_common.py',
+                                          'stage1_scoring.py', 'score_stage1_template_v1.py',
+                                          'score_stage1_audit_v2.py',
                                           'run_stage1_deepseek.py', 'run_stage1_qwen.py')]
 SOURCE_FILES += [STAGE2 / name for name in ('prompt_common.py', 'run_zero_shot_qwen.py')]
 

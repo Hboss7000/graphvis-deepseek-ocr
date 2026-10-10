@@ -1,5 +1,10 @@
 # raw / preprocessed data (large, not yours to redistribute, regeneratable from QA-GNN release)
 data_preprocessed_release/
+data/transe/
+
+# vendored retrieval baselines
+mhgrn_code/MHGRN/
+mhgrn_code/GraphVis/
 
 # generated pipeline outputs (regeneratable from scripts)
 outputs/

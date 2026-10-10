@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from pathlib import Path
+from string import Formatter
 import sys
 
 import pytest
@@ -19,6 +20,7 @@ sys.path.insert(
 
 import score_stage1 as scorer
 import stage1_common as common
+import generate_graphvis_datasets as generator
 from test_gemma3_evaluation import dataset
 
 
@@ -79,6 +81,55 @@ def test_deepseek_ablation_prompt_variants_end_exactly_at_completion_prefix():
     old = common.deepseek_image_prompt(record, "none", "old-placeholder")
     assert old.endswith("Answer: <integer>")
     assert "<integer>" not in common.deepseek_image_prompt(record, "constrained", "standard")
+
+
+def test_deepseek_completion_accepts_every_entity_bearing_paper_prompt_template():
+    paper_templates = {
+        "node_description": generator.NODE_DESCRIPTION_PROMPTS,
+        "node_number": generator.NODE_NUMBER_PROMPTS,
+        "edge_number": generator.EDGE_NUMBER_PROMPTS,
+        "triple_listing": generator.TRIPLE_LISTING_PROMPTS,
+        "highest_node_degree": generator.HIGHEST_DEGREE_PROMPTS,
+        "node_degree": generator.NODE_DEGREE_PROMPTS,
+    }
+    checked = []
+    for task, templates in paper_templates.items():
+        for template in templates:
+            fields = [field for _, field, _, _ in Formatter().parse(template) if field]
+            if not fields:
+                continue
+            values = {field: f"{field} value" for field in fields}
+            prompt = template.format(**values)
+            completion = common.deepseek_image_prompt(
+                {"task_type": task, "prompt": prompt}, "none", "completion"
+            )
+            assert all(f'"{value}"' in completion for value in values.values())
+            checked.append((task, template))
+    assert checked == [("node_degree", template) for template in generator.NODE_DEGREE_PROMPTS]
+
+
+@pytest.mark.parametrize("prompt", [
+    "What is the degree of the selected node?",
+    'Compare "first" with "second".',
+])
+def test_deepseek_completion_falls_back_to_target_node(prompt):
+    record = {"task_type": "node_degree", "prompt": prompt, "target_node": "compass point"}
+    assert common.deepseek_image_prompt(record, "none", "completion") == (
+        '<image>\nThe degree of the node "compass point" is'
+    )
+
+
+def test_deepseek_completion_raises_only_when_quote_and_target_node_fail():
+    with pytest.raises(ValueError, match="Cannot identify node-degree entity"):
+        common.deepseek_image_prompt(
+            {"task_type": "node_degree", "prompt": "What degree?"}, "none", "completion"
+        )
+
+
+def test_all_deepseek_ablation_prompts_are_validated_together():
+    record = {"statement_idx": 7, "task_type": "node_degree", "prompt": "What degree?"}
+    with pytest.raises(ValueError, match=r"variant=completion.*statement_idx=7"):
+        common.validate_deepseek_ablation_prompts([record])
 
 
 def test_triple_scoring_keeps_valid_lines_and_penalizes_malformed_lines():

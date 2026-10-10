@@ -18,11 +18,11 @@ from score_stage1 import (
     require_task,
     structured_gold,
     read_jsonl,
-    score_files,
     write_failure_cases,
     write_json,
 )
 
+from stage1_scoring import DEFAULT_EXTRACTOR, score_files
 
 TASK_ORDER = {task: index for index, task in enumerate(TASK_TYPES)}
 EXPECTED_SPLIT = "test"
@@ -91,6 +91,13 @@ CONSTRAINED_ANSWER_SUFFIXES = {
 
 DEEPSEEK_PROMPT_VARIANTS = (
     "standard", "old-placeholder", "completion", "describe"
+)
+DEEPSEEK_ABLATION_CONDITIONS = (
+    ("original", "none", "standard"),
+    ("old_placeholder", "constrained", "old-placeholder"),
+    ("natural", "constrained", "standard"),
+    ("completion", "none", "completion"),
+    ("describe", "none", "describe"),
 )
 DEEPSEEK_COMPLETION_PREFIXES = {
     "node_number": "The total number of nodes in the graph is",
@@ -212,16 +219,29 @@ def deepseek_image_prompt(
         return "<image>\nDescribe this image in detail."
     task = str(record["task_type"])
     if task == "node_degree":
-        match = re.search(
-            r'node(?:\s+labeled)?\s+["“]([^"”]+)["”]', str(record["prompt"]),
-            re.IGNORECASE,
-        )
-        if not match:
+        quoted = re.findall(r'"([^"\r\n]+)"', str(record["prompt"]))
+        target = quoted[0] if len(quoted) == 1 else record.get("target_node")
+        if not isinstance(target, str) or not target.strip():
             raise ValueError(f"Cannot identify node-degree entity: {record['prompt']!r}")
-        prefix = f'The degree of the node "{match.group(1)}" is'
+        prefix = f'The degree of the node "{target.strip()}" is'
     else:
         prefix = DEEPSEEK_COMPLETION_PREFIXES[task]
     return f"<image>\n{prefix}"
+
+
+def validate_deepseek_ablation_prompts(records: list[dict]) -> None:
+    """Build every paper-ablation prompt before model imports."""
+    paper_records = [record for record in records if record.get("task_type") in TASK_TYPES]
+    for name, answer_format, prompt_variant in DEEPSEEK_ABLATION_CONDITIONS:
+        for record in paper_records:
+            try:
+                deepseek_image_prompt(record, answer_format, prompt_variant)
+            except Exception as error:
+                raise ValueError(
+                    f"Invalid DeepSeek ablation prompt: variant={name}, "
+                    f"statement_idx={record.get('statement_idx')}, "
+                    f"task_type={record.get('task_type')}: {error}"
+                ) from error
 
 
 def prompts_sha256(records: list[dict], builder) -> str:
@@ -294,6 +314,9 @@ def completed_keys(output_dir: Path, model_name: str, task_types=TASK_TYPES) -> 
 
 
 def write_run_config(output_dir: Path, config: dict) -> None:
+    frozen_prompt = os.environ.get("STAGE1_FROZEN_PROMPT_POLICY_JSON")
+    if frozen_prompt:
+        config = {**config, "frozen_prompt": json.loads(frozen_prompt)}
     # Only matrix launches set this variable; standalone evaluator behavior stays intact.
     cell_json = os.environ.get('STAGE1_MATRIX_CELL_JSON')
     if cell_json:
@@ -328,7 +351,7 @@ def score_completed_run(
     output_dir: Path,
     model_name: str,
     task_set: str = "paper",
-    extractor: str = "span",
+    extractor: str = DEFAULT_EXTRACTOR,
 ) -> None:
     task_types = TASK_SETS[task_set]
     scoring_args = argparse.Namespace(

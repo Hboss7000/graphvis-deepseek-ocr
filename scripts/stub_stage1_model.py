@@ -17,7 +17,8 @@ SCORER_DIR = (
 )
 sys.path.insert(0, str(SCORER_DIR))
 
-from score_stage1 import TASK_SETS, answer_format_diagnostics, score_record  # noqa: E402
+from score_stage1 import TASK_SETS, answer_format_diagnostics  # noqa: E402
+from stage1_scoring import DEFAULT_EXTRACTOR, score_record  # noqa: E402
 from stage1_common import score_completed_run, validate_stage1  # noqa: E402
 
 
@@ -106,6 +107,7 @@ def main() -> None:
         },
         "expected_split": args.expected_split,
         "task_set": args.task_set,
+        "extractor": DEFAULT_EXTRACTOR,
         "answer_format": args.answer_format,
         "prompt_variant": args.prompt_variant,
         "behavior_only": args.behavior_only,

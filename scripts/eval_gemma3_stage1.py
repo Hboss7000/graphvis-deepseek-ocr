@@ -21,13 +21,12 @@ from score_stage1 import (
     TASK_TYPES,
     TASK_SETS,
     EXTENDED_TASK_TYPES,
-    aggregate_task,
     answer_format_diagnostics,
     read_jsonl,
     require_task,
-    score_record,
 )
 
+from stage1_scoring import EXTRACTORS, DEFAULT_EXTRACTOR, score_record, aggregate_task
 from stage1_common import (
     ANSWER_FORMATS,
     answer_format_provenance,
@@ -71,7 +70,7 @@ def parse_args() -> argparse.Namespace:
         help="Confirm the printed prompts were reviewed and permit inference",
     )
     parser.add_argument('--task-set', choices=('paper', 'extended'), default='paper')
-    parser.add_argument('--extractor', choices=('legacy', 'span', 'span_extended'), default='span')
+    parser.add_argument('--extractor', choices=EXTRACTORS, default=DEFAULT_EXTRACTOR)
     parser.add_argument('--preflight', nargs='?', const=50, type=int,
                         help='Run triple_listing on N graphs with BOTH crop settings (default N=50)')
     parser.add_argument('--preflight-min-recall', type=float, default=0.95,
@@ -181,7 +180,7 @@ def run_preflight(args, records, metadata, model, processor, details, torch, run
                 handle.flush()
                 print(f'PREFLIGHT {setting} [{len(rows)}/{len(records)}] '
                       f'recall={row["gold_node_component_recall"]["raw"]["recall"]}', flush=True)
-        metrics = aggregate_task('triple_listing', rows)
+        metrics = aggregate_task('triple_listing', rows, getattr(trial_args, 'extractor', DEFAULT_EXTRACTOR))
         recall = metrics['gold_node_component_recall']['raw']['macro_recall']
         report['settings'][setting] = {'passed': recall >= args.preflight_min_recall,
                                        'metrics': metrics}

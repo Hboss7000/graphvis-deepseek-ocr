@@ -19,7 +19,7 @@ readonly PHASE
 if [[ "${DRY_RUN}" == "1" ]]; then
   readonly DRY_RUN_BASE="${DRY_RUN_ROOT:-$(mktemp -d "${TMPDIR:-/tmp}/stage1-session-dry-run.XXXXXXXX")}"
   readonly WORKSPACE="${DRY_RUN_BASE}/workspace"
-  if [[ -e "${WORKSPACE}/outputs" ]]; then
+  if [[ "${PHASE}" == "pilot" && -e "${WORKSPACE}/outputs" ]]; then
     echo "ERROR: dry-run output tree must be absent: ${WORKSPACE}/outputs" >&2
     exit 1
   fi
@@ -54,6 +54,7 @@ readonly MAIN_ROOT="${WORKSPACE}/outputs/stage1_subset100"
 readonly STATE_DIR="${WORKSPACE}/outputs/stage1_session_state"
 readonly PILOT_DONE="${STATE_DIR}/pilot_v2.complete"
 readonly FREEZE_FILE="${STATE_DIR}/prompts_frozen.json"
+readonly PROMPT_POLICY_FILE="${REPO_ROOT}/scripts/stage1_prompt_policy.json"
 
 readonly DEEPSEEK_ID="deepseek-ai/DeepSeek-OCR-2"
 readonly DEEPSEEK_REV="aaa02f3811945a91062062994c5c4a3f4c0af2b0"
@@ -69,13 +70,14 @@ cd "${REPO_ROOT}"
 
 usage() {
   echo "Usage: $0 pilot|freeze|main --cap 18|40 --model deepseek|qwen|gemma" >&2
-  echo "       DRY_RUN=1 $0 [pilot]  # local CPU/stub rehearsal; pilot only" >&2
+  echo "       DRY_RUN=1 $0 [pilot]  # local CPU/stub rehearsal" >&2
+  echo "       DRY_RUN=1 DRY_RUN_ROOT=<completed-root> CONFIRM_PROMPT_FREEZE=yes $0 freeze" >&2
   echo "Run pilot first, inspect its report, then run CONFIRM_PROMPT_FREEZE=yes $0 freeze." >&2
   exit 2
 }
 [[ "${PHASE}" =~ ^(pilot|freeze|main)$ ]] || usage
-if [[ "${DRY_RUN}" == "1" && "${PHASE}" != "pilot" ]]; then
-  echo "ERROR: DRY_RUN=1 rehearses the complete pilot and stops; freeze/main are intentionally unavailable." >&2
+if [[ "${DRY_RUN}" == "1" && "${PHASE}" == "main" ]]; then
+  echo "ERROR: DRY_RUN=1 supports pilot and freeze only; main is intentionally unavailable." >&2
   exit 2
 fi
 shift || true
@@ -101,14 +103,30 @@ require_file() {
 }
 
 verify_prompt_freeze() {
-  "${SYSTEM_PYTHON}" - "${FREEZE_FILE}" <<'PY'
+  "${SYSTEM_PYTHON}" - "${FREEZE_FILE}" "${PROMPT_POLICY_FILE}" <<'PY'
 import hashlib, json, pathlib, sys
 record = json.loads(pathlib.Path(sys.argv[1]).read_text())
+policy_path = pathlib.Path(sys.argv[2])
+policy = json.loads(policy_path.read_text())
 path = pathlib.Path.cwd() / 'experiments/2026-09-04_stage1_graph_comprehension_zero_shot/scripts/stage1_common.py'
 actual = hashlib.sha256(path.read_bytes()).hexdigest()
 if actual != record['stage1_common_sha256']:
     raise SystemExit(f"Frozen prompt code changed: expected {record['stage1_common_sha256']}, found {actual}")
+policy_sha = hashlib.sha256(policy_path.read_bytes()).hexdigest()
+if policy_sha != record['prompt_policy_file_sha256'] or policy != record['prompt_policy']:
+    raise SystemExit('Frozen per-model prompt policy changed')
+digest = hashlib.sha256()
+digest.update(b'stage1_common.py\0' + path.read_bytes())
+digest.update(b'prompt_policy\0' + json.dumps(policy, sort_keys=True, separators=(',', ':')).encode())
+contract_sha = digest.hexdigest()
+if contract_sha != record['frozen_prompt_contract_sha256']:
+    raise SystemExit(f"Frozen prompt contract changed: expected {record['frozen_prompt_contract_sha256']}, found {contract_sha}")
 PY
+}
+
+timestamped_log() {
+  local stem="$1"
+  printf '%s/%s_%s.log' "${LOG_DIR}" "${stem}" "$(date -u +%Y%m%dT%H%M%S.%NZ)"
 }
 
 write_render_configs() {
@@ -400,11 +418,14 @@ run_deepseek_ablation() {
     2>&1 | tee -a "${LOG_DIR}/deepseek_ablation_describe.log"
   "${QWEN_PYTHON}" scripts/record_runpod_gpu.py "${root}/describe/run_config.json"
   fi
+  local report_log
+  report_log="$(timestamped_log deepseek_ablation_report)"
   "${QWEN_PYTHON}" scripts/report_deepseek_prompt_ablation.py \
     --run "original=${root}/original" --run "old_placeholder=${root}/old_placeholder" \
     --run "natural=${root}/natural" --run "completion=${root}/completion" \
     --run "describe=${root}/describe" --output-json "${root}/report.json" \
-    --output-markdown "${root}/report.md" | tee -a "${LOG_DIR}/deepseek_ablation_report.log"
+    --output-markdown "${root}/report.md" | tee "${report_log}"
+  echo "Ablation report log: ${report_log}"
 }
 
 pilot_phase() {
@@ -429,6 +450,8 @@ pilot_phase() {
     run_model_set dev 10 "${cap}" "${dataset}" "${root}" constrained "stage1_pilot_nodes${cap}"
   done
   echo "PHASE report: combined re-pilot report"
+  local report_log
+  report_log="$(timestamped_log stage1_pilot_report)"
   "${QWEN_PYTHON}" scripts/report_stage1_answer_format.py \
     --answer-format constrained \
     --run "nodes18/deepseek=${PILOT_ROOT}/nodes18/deepseek" \
@@ -439,7 +462,8 @@ pilot_phase() {
     --run "nodes40/gemma=${PILOT_ROOT}/nodes40/gemma" \
     --output-json "${PILOT_ROOT}/pilot_report.json" \
     --output-markdown "${PILOT_ROOT}/pilot_report.md" \
-    | tee -a "${LOG_DIR}/stage1_pilot_report.log"
+    | tee "${report_log}"
+  echo "Pilot report log: ${report_log}"
   date -u +%FT%TZ > "${PILOT_DONE}"
   if [[ "${DRY_RUN}" == "1" ]]; then
     echo "DRY RUN COMPLETE. Preserved temporary workspace at ${WORKSPACE}."
@@ -448,20 +472,34 @@ pilot_phase() {
 }
 
 freeze_phase() {
-  require_file "${PILOT_DONE}"
+  require_file "${PILOT_DONE}"; require_file "${PROMPT_POLICY_FILE}"
   [[ "${CONFIRM_PROMPT_FREEZE:-}" == "yes" ]] || {
     echo "ERROR: after reviewing the dev pilot, run CONFIRM_PROMPT_FREEZE=yes $0 freeze" >&2
     exit 1
   }
-  "${SYSTEM_PYTHON}" - "${FREEZE_FILE}" <<'PY'
+  "${SYSTEM_PYTHON}" - "${FREEZE_FILE}" "${PROMPT_POLICY_FILE}" <<'PY'
 import hashlib, json, pathlib, sys
 root = pathlib.Path.cwd()
 common = root / 'experiments/2026-09-04_stage1_graph_comprehension_zero_shot/scripts/stage1_common.py'
-payload = {'frozen_utc': __import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat(),
-           'stage1_common_sha256': hashlib.sha256(common.read_bytes()).hexdigest(),
-           'decision': 'dev pilot accepted; prompts frozen'}
-pathlib.Path(sys.argv[1]).write_text(json.dumps(payload, indent=2, sort_keys=True) + '\n')
+target, policy_path = map(pathlib.Path, sys.argv[1:])
+if target.exists():
+    raise SystemExit(f'Refusing to overwrite existing prompt freeze: {target}')
+policy = json.loads(policy_path.read_text())
+canonical_policy = json.dumps(policy, sort_keys=True, separators=(',', ':')).encode()
+digest = hashlib.sha256()
+digest.update(b'stage1_common.py\0' + common.read_bytes())
+digest.update(b'prompt_policy\0' + canonical_policy)
+payload = {
+    'frozen_utc': __import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat(),
+    'stage1_common_sha256': hashlib.sha256(common.read_bytes()).hexdigest(),
+    'prompt_policy_file_sha256': hashlib.sha256(policy_path.read_bytes()).hexdigest(),
+    'frozen_prompt_contract_sha256': digest.hexdigest(),
+    'prompt_policy': policy,
+    'decision': 'stage1_prompt_repilot_v2 accepted; per-model prompts frozen',
+}
+target.write_text(json.dumps(payload, indent=2, sort_keys=True) + '\n')
 PY
+  verify_prompt_freeze
   echo "Prompt freeze recorded in ${FREEZE_FILE}. Stop here."
 }
 
@@ -481,8 +519,24 @@ main_phase() {
   }
   local dataset="${MAIN_ROOT}/nodes${CAP}/data"
   local root="${MAIN_ROOT}/nodes${CAP}"
+  local answer_format
+  answer_format="$("${SYSTEM_PYTHON}" - "${FREEZE_FILE}" "${MODEL}" <<'PY'
+import json, pathlib, sys
+record = json.loads(pathlib.Path(sys.argv[1]).read_text())
+print(record['prompt_policy']['models'][sys.argv[2]]['answer_format'])
+PY
+)"
+  export STAGE1_FROZEN_PROMPT_POLICY_JSON
+  STAGE1_FROZEN_PROMPT_POLICY_JSON="$("${SYSTEM_PYTHON}" - "${FREEZE_FILE}" <<'PY'
+import json, pathlib, sys
+record = json.loads(pathlib.Path(sys.argv[1]).read_text())
+print(json.dumps({key: record[key] for key in (
+    'frozen_utc', 'stage1_common_sha256', 'prompt_policy_file_sha256',
+    'frozen_prompt_contract_sha256', 'prompt_policy')}, sort_keys=True, separators=(',', ':')))
+PY
+)"
   generate_dataset test 100 "${CAP}" "${dataset}"
-  run_model_set test 100 "${CAP}" "${dataset}" "${root}" constrained \
+  run_model_set test 100 "${CAP}" "${dataset}" "${root}" "${answer_format}" \
     "stage1_subset100_nodes${CAP}_${MODEL}" "${MODEL}"
   echo "MAIN BLOCK COMPLETE: cap=${CAP}, model=${MODEL}, output=${root}/${MODEL}."
 }
