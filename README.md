@@ -17,18 +17,16 @@ this README specifies the actual code paths and remaining reproduction limits.
 
 ## What is included
 
-`.gitignore` is an explicit publication allowlist. It keeps the experiment entry
-points, their local helper dependencies, relevant regression tests, environment
-pins, subset manifests and the small text artifacts needed for reproduction.
-[reproduction/files.txt](reproduction/files.txt) inventories that selection.
-The dated experiment directories contain active shared runners and scorers;
-their names do not mean that they can be deleted.
+The repository contains the experiment runners, shared helpers, regression
+tests, environment pins, subset manifests and text artifacts needed for
+reproduction. [reproduction/files.txt](reproduction/files.txt) lists the included
+files. The dated experiment directories contain the shared runners and scorers
+used by the reproduction commands.
 
 Raw QA-GNN/ConceptNet downloads, external vendor checkouts, virtual environments,
 weights, checkpoints, predictions, rendered images, logs, thesis PDF, figure
-exports and session notes stay local. New files are ignored until added to the
-allowlist. The prepared repository does not distribute trained adapters or a
-complete archive of the original predictions.
+exports and session notes are excluded. Trained adapters and a complete archive
+of the original predictions must be obtained separately.
 
 [reproduction/manifest.json](reproduction/manifest.json) records SHA-256 hashes
 and original locations for the frozen evaluation records, synthetic dataset,
@@ -418,7 +416,7 @@ orders remain together. Preserve denominators, truncations and failed parses.
 ## Earlier experiments and reproduction limits
 
 For §5.2, the wrappers need external checkouts and QA-GNN data plus TransE
-arrays. The local vendor revisions inspected for this update were:
+arrays. Use these recorded vendor revisions:
 
 ```bash
 git clone https://github.com/INK-USC/MHGRN mhgrn_code/MHGRN
@@ -459,18 +457,6 @@ blue; the final zero-shot figure uses v4 while fine-tuning sections use older
 extraction. Preserve these distinctions instead of changing conditions until
 numbers agree. Greedy decoding and seeds do not guarantee bit-identical training
 or inference across hardware/library versions.
-
-Verified during this repository update: the thesis scope, CLI flags, frozen
-artifact hashes, local dependency/Graphviz versions, three-image CPU replay and
-offline rescoring against saved predictions. No dependency installation,
-external data download, new model inference, training or paid GPU run was
-performed. The commands for those stages are instructions, not a claim that a
-fresh-machine end-to-end replication has passed.
-An isolated copy of the publication files passed 299 CPU regression checks
-(2 skipped); its QA-GNN regression used the existing local upstream download.
-The portable five-file suite passed 117 checks without that download. Three
-replayed images matched their original PNG hashes; offline checks recovered
-Gemma image QA at 59.8% and all nine LLaVA v4 zero-shot scores.
 
 ## Prompt for your own code agent
 
@@ -521,23 +507,3 @@ completion/key checks, metrics and paired comparisons against the preserved
 reference. Disclose differences and unreproduced parts. Do not claim success
 from a CPU stand-in, missing predictions or a passing syntax check alone.
 ```
-
-## Prepare the publication commit
-
-`.gitignore` does not remove already tracked files or erase Git history. The
-cleanup removes excluded files from the index while leaving working copies on
-disk. Review the staged deletions and the allowlisted additions before committing:
-
-```bash
-git ls-files -ci --exclude-standard       # Should be empty after cleanup.
-git status --short
-git add -A
-git diff --cached --stat
-git diff --cached --check
-# Then commit and push to your own configured remote.
-```
-
-Do not use `git add -f` for data, environments, checkpoints or logs. Existing
-committed artifacts remain in history; this update does not rewrite history.
-When adding a genuinely required script, add its exact path to `.gitignore`
-and update `reproduction/files.txt` together.
