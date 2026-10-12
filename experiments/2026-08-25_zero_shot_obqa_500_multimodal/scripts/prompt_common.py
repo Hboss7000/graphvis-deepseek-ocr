@@ -87,8 +87,8 @@ def index_graph_metadata(path: Path, records: list[dict]) -> dict[int, dict]:
     return metadata_by_idx
 
 
-def format_kg_block(meta: dict) -> str:
-    """Linearise exactly the connected edges recorded in graph metadata."""
+def format_kg_block(meta: dict, *, preserve_order: bool = False) -> str:
+    """Linearise connected edges; optionally retain metadata order for paired renders."""
     names_by_cid: dict[int, str] = {}
     connected_by_cid: dict[int, bool] = {}
     for node in meta["visible_nodes"]:
@@ -116,7 +116,8 @@ def format_kg_block(meta: dict) -> str:
         relation_text = RELATION_TEXT.get(relation, relation)
         triples.append((source_name, relation_text, target_name))
 
-    triples.sort()
+    if not preserve_order:
+        triples.sort()
     if not triples:
         raise ValueError(
             "Cannot construct kg_text prompt from an empty triple block for "
@@ -151,10 +152,25 @@ def completed_indices(path: Path) -> set[int]:
 
 
 PARSER_PROTOCOL = "explicit_v1"
+PARSER_PROTOCOLS = ("explicit_v1", "explicit_v2")
+FIRST_LINE_LETTER = re.compile(r"^\s*\**\(?([ABCD])\)?[.):]?\**\s*$")
 
 
-def parse_answer(pred_text: str, n_choices: int) -> tuple[str, str]:
+def parse_answer(
+    pred_text: str, n_choices: int, *, parser_version: str = PARSER_PROTOCOL
+) -> tuple[str, str]:
     """Accept a sole option or an unambiguous explicit answer; never infer from mentions."""
+    if parser_version == "explicit_v2":
+        parsed = parse_answer(pred_text, n_choices, parser_version="explicit_v1")
+        if parsed[0] != "FAILED":
+            return parsed
+        first_line = next((line for line in pred_text.splitlines() if line.strip()), "")
+        match = FIRST_LINE_LETTER.fullmatch(first_line)
+        if match and match[1] in OPTIONS[:n_choices]:
+            return match[1], "first_line_letter"
+        return parsed
+    if parser_version != "explicit_v1":
+        raise ValueError(f"Unknown QA parser version: {parser_version}")
     opts = OPTIONS[:n_choices]
     text = pred_text.strip()
     if text in opts:

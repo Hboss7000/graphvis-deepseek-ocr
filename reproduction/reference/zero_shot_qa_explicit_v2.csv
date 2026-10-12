@@ -1,0 +1,17 @@
+parser_version,model,condition,accuracy,unparsed
+explicit_v2,deepseek,image,28.999999999999996,0
+explicit_v2,deepseek,kg_text,30.4,1
+explicit_v2,deepseek,text,36.6,3
+explicit_v2,deepseek,text_noref,42.0,0
+explicit_v2,gemma,image,59.8,14
+explicit_v2,gemma,kg_text,62.6,57
+explicit_v2,gemma,text,85.2,4
+explicit_v2,gemma,text_noref,87.4,2
+explicit_v2,llava,image,56.39999999999999,15
+explicit_v2,llava,kg_text,65.4,15
+explicit_v2,llava,text,68.0,28
+explicit_v2,llava,text_noref,74.0,6
+explicit_v2,qwen,image,74.2,23
+explicit_v2,qwen,kg_text,72.6,56
+explicit_v2,qwen,text,84.8,27
+explicit_v2,qwen,text_noref,83.6,45

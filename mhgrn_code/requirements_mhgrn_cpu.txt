@@ -1,0 +1,10 @@
+# Install CPU-only torch from PyTorch's CPU wheel index before this file; see README.
+numpy
+scipy
+tqdm
+networkx<3
+nltk
+graphviz
+Pillow
+matplotlib
+pytest

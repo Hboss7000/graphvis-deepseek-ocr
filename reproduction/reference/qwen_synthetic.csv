@@ -1,0 +1,11 @@
+prompt_style,model,condition,metric,scope,dataset,reasoning_hops,n_graphs,n_rows,accuracy,ci_low,ci_high
+obqa,base,image,parsed_letter,overall,all,,50,400,0.365,0.29,0.4425
+obqa,base,none,parsed_letter,overall,all,,50,400,0.2375,0.19,0.2875
+obqa,base,text,parsed_letter,overall,all,,50,400,0.625,0.5375,0.710062499999999
+obqa,base,wrong_image,parsed_letter,overall,all,,50,400,0.0,0.0,0.0
+obqa,base,wrong_text,parsed_letter,overall,all,,50,400,0.0,0.0,0.0
+obqa,tuned,image,parsed_letter,overall,all,,50,400,0.4625,0.3875,0.535
+obqa,tuned,none,parsed_letter,overall,all,,50,400,0.2575,0.215,0.3
+obqa,tuned,text,parsed_letter,overall,all,,50,400,0.6925,0.605,0.772562499999999
+obqa,tuned,wrong_image,parsed_letter,overall,all,,50,400,0.0,0.0,0.0
+obqa,tuned,wrong_text,parsed_letter,overall,all,,50,400,0.0,0.0,0.0

@@ -1,0 +1,10 @@
+task,label,base,fine_tuned,n,source
+node_description,Node description (macro F1),0.44,0.93,100,User-supplied Table 5.Z
+node_number,Node number (acc),0.02,0.38,100,User-supplied Table 5.Z
+edge_number,Edge number (acc),0.04,0.49,100,User-supplied Table 5.Z
+triple_listing,Triple listing (macro F1),0.04,0.54,100,User-supplied Table 5.Z
+highest_node_degree,Highest node degree (degree acc),0.01,0.37,100,User-supplied Table 5.Z
+node_degree,Node degree (acc),0.22,0.58,100,User-supplied Table 5.Z
+relation_identification,Relation identification (acc) *,0.46,0.52,100,User-supplied Table 5.Z
+neighbor_listing,Neighbor listing (mean F1) *,0.14,0.31,100,User-supplied Table 5.Z
+shortest_path_listing,Shortest path listing (acc) *,0.05,0.22,100,User-supplied Table 5.Z
